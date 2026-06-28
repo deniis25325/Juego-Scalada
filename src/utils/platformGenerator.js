@@ -274,14 +274,14 @@ export function generateInitialPlatforms(count = 35) {
   // Big starting platform
   platforms.push({
     id: 'start',
-    position: [0, 0, 0],
+    position: [0, -0.5, 0],
     size: [7.5, 0.5, 7.5],
     rotation: [0, 0, 0],
     type: 'standard',
     isMobile: false
   });
 
-  let lastY = 0, lastX = 0, lastZ = 0;
+  let lastY = 2.5, lastX = 0, lastZ = 0;
 
   while (platforms.length < count) {
     const newPlats = generatePlatform(lastY, lastX, lastZ, lastY);

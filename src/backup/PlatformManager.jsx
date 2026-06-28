@@ -13,22 +13,16 @@ export default function PlatformManager({ player1PosRef, player2PosRef }) {
   const lastCheckY                  = useRef(-Infinity)
   const phase                       = useGameStore(s => s.phase)
   const multiplayer                 = useGameStore(s => s.multiplayer)
-  const levelVersion                = useGameStore(s => s.levelVersion)
-  const prevVersionRef              = useRef(0)
 
   // ── Reset on new game ────────────────────────────────────────────────
   useEffect(() => {
     if (phase === 'playing') {
-      // Only regenerate platforms if the level version changed (real start or reset)
-      if (levelVersion !== prevVersionRef.current) {
-        const initial = generateInitialPlatforms(35)
-        setPlatforms(initial)
-        topYRef.current   = initial[initial.length - 1].position[1]
-        lastCheckY.current = -Infinity
-        prevVersionRef.current = levelVersion
-      }
+      const initial = generateInitialPlatforms(35)
+      setPlatforms(initial)
+      topYRef.current   = initial[initial.length - 1].position[1]
+      lastCheckY.current = -Infinity
     }
-  }, [phase, levelVersion])
+  }, [phase])
 
   // ── Per-frame: generate ahead, cull behind ───────────────────────────
   useFrame(() => {

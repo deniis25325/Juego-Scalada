@@ -8,16 +8,17 @@ const useGameStore = create((set, get) => ({
   multiplayer: false,
   scenario: 'default', // 'default' | 'fog' | 'neon' | 'dark'
   isTransitioning: false,
-  checkpointPos: [0, 2.5, 0],
+  checkpointPos: [0, -0.25, 0],
+  levelVersion: 0,
 
-  startGame: () => set({ phase: 'playing', score: 0, height: 0, checkpointPos: [0, 2.5, 0] }),
+  startGame: () => set((state) => ({ phase: 'playing', score: 0, height: 0, checkpointPos: [0, -0.25, 0], levelVersion: state.levelVersion + 1 })),
 
   gameOver: () => {
     const { score, highScore } = get()
     set({ phase: 'dead', highScore: Math.max(score, highScore) })
   },
 
-  restart: () => set({ phase: 'playing', score: 0, height: 0, checkpointPos: [0, 2.5, 0] }),
+  restart: () => set((state) => ({ phase: 'playing', score: 0, height: 0, checkpointPos: [0, -0.25, 0], levelVersion: state.levelVersion + 1 })),
 
   setHeight: (h) => {
     const rounded = Math.max(0, Math.floor(h))
@@ -38,7 +39,7 @@ const useGameStore = create((set, get) => ({
 
   setCheckpoint: (pos) => set({ checkpointPos: pos }),
 
-  exitToMenu: () => set({ phase: 'ready', score: 0, height: 0, checkpointPos: [0, 2.5, 0] }),
+  exitToMenu: () => set({ phase: 'ready', score: 0, height: 0, checkpointPos: [0, -0.25, 0] }),
 }))
 
 export default useGameStore

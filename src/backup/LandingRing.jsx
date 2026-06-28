@@ -38,7 +38,7 @@ export default function LandingRing() {
   })
 
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} scale={[0, 0, 0]}>
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
       <ringGeometry args={[0.7, 1, 48]} />
       <meshStandardMaterial
         ref={matRef}

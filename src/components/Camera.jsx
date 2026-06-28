@@ -38,14 +38,29 @@ export default function Camera({ player1PosRef, player2PosRef }) {
     let dist = 0
 
     if (multiplayer && p2 && p2.x !== undefined) {
-      cx = (p1.x + p2.x) / 2
-      cy = (p1.y + p2.y) / 2
-      cz = (p1.z + p2.z) / 2
+      const p1DeadOrRespawning = window.player1Respawning || p1.y < -15
+      const p2DeadOrRespawning = window.player2Respawning || p2.y < -15
 
-      const dx = p1.x - p2.x
-      const dy = p1.y - p2.y
-      const dz = p1.z - p2.z
-      dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (p1DeadOrRespawning && !p2DeadOrRespawning) {
+        cx = p2.x
+        cy = p2.y
+        cz = p2.z
+        dist = 0
+      } else if (p2DeadOrRespawning && !p1DeadOrRespawning) {
+        cx = p1.x
+        cy = p1.y
+        cz = p1.z
+        dist = 0
+      } else {
+        cx = (p1.x + p2.x) / 2
+        cy = (p1.y + p2.y) / 2
+        cz = (p1.z + p2.z) / 2
+
+        const dx = p1.x - p2.x
+        const dy = p1.y - p2.y
+        const dz = p1.z - p2.z
+        dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      }
     }
 
     _playerPos.set(cx, cy, cz)

@@ -12,11 +12,6 @@ const JUMP_VEL = 13
 const DEATH_Y  = -25
 const DAMPING  = 8
 
-// Safe vertical margin above platform surface for spawning.
-// CapsuleCollider half-height(0.35) + radius(0.38) = 0.73 from center to bottom.
-// We want the bottom of the capsule to clear the top of the platform by ~0.1 units.
-const SAFE_SPAWN_OFFSET = 0.85
-
 // Reusable module-level vectors (no allocations per frame)
 const _camDir  = new Vector3()
 const _right   = new Vector3()
@@ -24,12 +19,10 @@ const _up      = new Vector3(0, 1, 0)
 const _moveDir = new Vector3()
 
 // Global positions and velocities for coordinate referencing in multiplayer coop respawns
-window.player1Pos = { x: 0, y: 0.6, z: 0 }
-window.player2Pos = { x: 0, y: 0.6, z: 0 }
+window.player1Pos = { x: 0, y: 2.5, z: 0 }
+window.player2Pos = { x: 0, y: 2.5, z: 0 }
 window.player1Vel = { x: 0, y: 0, z: 0 }
 window.player2Vel = { x: 0, y: 0, z: 0 }
-window.player1Respawning = false
-window.player2Respawning = false
 
 export default function Player({ playerId = 1, playerPosRef }) {
   const rbRef          = useRef()
@@ -38,10 +31,6 @@ export default function Player({ playerId = 1, playerPosRef }) {
   const wasGroundedRef = useRef(false)  // landing detection
   const wasJumpRef     = useRef(false)  // prevent hold-to-jump
   const coyoteRef      = useRef(0)      // grace window after leaving platform
-  const isRespawning   = useRef(false)
-  const respawnTimeoutRef = useRef(null)
-  const prevVersionRef = useRef(0)
-  const respawnTargetRef = useRef({ x: 0, y: -0.25 + 0.85, z: 0 })
 
   // Visual refs — physics body is NOT scaled/rotated
   const squashGroupRef = useRef()   // squash & stretch scale
@@ -62,72 +51,29 @@ export default function Player({ playerId = 1, playerPosRef }) {
   const isTransitioning = useGameStore(s => s.isTransitioning)
   const gameOver        = useGameStore(s => s.gameOver)
   const setHeight       = useGameStore(s => s.setHeight)
-  const levelVersion    = useGameStore(s => s.levelVersion)
 
   // Reset physics on new game / retry
   useEffect(() => {
     if (phase === 'playing' && rbRef.current) {
-      // Only teleport players if the level version changed (real start or reset)
-      if (levelVersion !== prevVersionRef.current) {
-        const checkpointPos = useGameStore.getState().checkpointPos
-        const spawnX = playerId === 1 ? -1.2 : 1.2
+      const checkpointPos = useGameStore.getState().checkpointPos
+      const spawnX = playerId === 1 ? -1 : 1
 
-        // Reset respawn state
-        isRespawning.current = false
-        if (playerId === 1) {
-          window.player1Respawning = false
-        } else {
-          window.player2Respawning = false
-        }
+      // Spawn at checkpoint if active, else spawn at starting base
+      const hasCheckpoint = checkpointPos[1] > 3.0
+      const sx = hasCheckpoint ? checkpointPos[0] + (multiplayer ? spawnX : 0) : (multiplayer ? spawnX : 0)
+      const sy = hasCheckpoint ? checkpointPos[1] : 2.5
+      const sz = hasCheckpoint ? checkpointPos[2] : 0
 
-        // Spawn at checkpoint if active, else spawn at starting base
-        // Starting platform top surface = -0.5 + 0.25 = -0.25
-        // Checkpoint platform top surface = checkpointPos stored as platformCenter + platformHalfHeight
-        const hasCheckpoint = checkpointPos[1] > 3.0
-        const sx = hasCheckpoint ? checkpointPos[0] + (multiplayer ? spawnX : 0) : (multiplayer ? spawnX : 0)
-        const sy = hasCheckpoint ? checkpointPos[1] + SAFE_SPAWN_OFFSET : (-0.25 + SAFE_SPAWN_OFFSET)
-        const sz = hasCheckpoint ? checkpointPos[2] : 0
-
-        rbRef.current.setTranslation({ x: sx, y: sy, z: sz }, true)
-        rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
-        rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-
-        prevVersionRef.current = levelVersion
-      }
+      rbRef.current.setTranslation({ x: sx, y: sy, z: sz }, true)
+      rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
-  }, [phase, levelVersion, multiplayer, playerId])
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (respawnTimeoutRef.current) clearTimeout(respawnTimeoutRef.current)
-    }
-  }, [])
+  }, [phase, multiplayer])
 
   const [, getKeys] = useKeyboardControls()
 
   useFrame((state, delta) => {
     if (!rbRef.current || phase === 'ready' || phase === 'dead') return
-
-    // ── Respawn Handling (Freeze during transition) ───────────────────
-    if (isRespawning.current) {
-      rbRef.current.setTranslation(respawnTargetRef.current, true)
-      rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
-      rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-
-      // Keep position refs updated so PlatformManager doesn't cull checkpoint platform
-      if (playerPosRef) {
-        playerPosRef.current.x = respawnTargetRef.current.x
-        playerPosRef.current.y = respawnTargetRef.current.y
-        playerPosRef.current.z = respawnTargetRef.current.z
-      }
-      if (playerId === 1) {
-        window.player1Pos = { ...respawnTargetRef.current }
-      } else {
-        window.player2Pos = { ...respawnTargetRef.current }
-      }
-      return
-    }
 
     // ── Pause State Handling ──────────────────────────────────────────
     if (phase === 'paused') {
@@ -150,29 +96,14 @@ export default function Player({ playerId = 1, playerPosRef }) {
     // Save positions to window for coop coordinate checks
     if (playerId === 1) {
       window.player1Pos = { x: translation.x, y: translation.y, z: translation.z }
-      window.player1Respawning = isRespawning.current
     } else {
       window.player2Pos = { x: translation.x, y: translation.y, z: translation.z }
-      window.player2Respawning = isRespawning.current
     }
 
     // ── Safe Fall & Respawn (Bug Fix) ──────────────────────────────────
-    if (translation.y < DEATH_Y && !isRespawning.current) {
-      isRespawning.current = true
-      if (playerId === 1) {
-        window.player1Respawning = true
-      } else {
-        window.player2Respawning = true
-      }
-
+    if (translation.y < DEATH_Y && !isTransitioning) {
+      useGameStore.setState({ isTransitioning: true })
       audioSystem.playSFX('fall')
-
-      // Reset internal states to prevent pre-existing jump or coyote calculations on respawn
-      isGrounded.current = false
-      groundContacts.current = 0
-      wasGroundedRef.current = false
-      wasJumpRef.current = false
-      coyoteRef.current = 0
 
       // Freeze all movement immediately
       rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
@@ -181,15 +112,14 @@ export default function Player({ playerId = 1, playerPosRef }) {
       const checkpointPos = useGameStore.getState().checkpointPos
 
       let respawnX = checkpointPos[0]
-      let respawnY = checkpointPos[1] + SAFE_SPAWN_OFFSET
+      let respawnY = checkpointPos[1]
       let respawnZ = checkpointPos[2]
       let isCoopRespawn = false
 
       if (multiplayer) {
         const otherPos = playerId === 1 ? window.player2Pos : window.player1Pos
-        const otherRespawning = playerId === 1 ? window.player2Respawning : window.player1Respawning
-        // If buddy is still alive and not respawning, respawn on top of them!
-        if (otherPos && otherPos.y > DEATH_Y && !otherRespawning) {
+        // If buddy is still alive, respawn on top of them!
+        if (otherPos && otherPos.y > DEATH_Y) {
           respawnX = otherPos.x
           respawnY = otherPos.y + 2.0
           respawnZ = otherPos.z
@@ -197,46 +127,15 @@ export default function Player({ playerId = 1, playerPosRef }) {
         }
       }
 
-      // Record coordinate target to hold player in place during transition
-      respawnTargetRef.current = { x: respawnX, y: respawnY, z: respawnZ }
+      rbRef.current.setTranslation({ x: respawnX, y: respawnY, z: respawnZ }, true)
 
-      // If both fell or single player, show the black screen transition
-      if (!isCoopRespawn) {
-        useGameStore.setState({ isTransitioning: true })
-      }
-
-      rbRef.current.setTranslation(respawnTargetRef.current, true)
-      
-      // Local effect on buddy respawn destination
-      emitDust(respawnX, respawnY - 1.0, respawnZ, 'land')
-
-      respawnTimeoutRef.current = setTimeout(() => {
-        // Re-apply exact position & zero velocity one final time before unfreezing
-        if (rbRef.current) {
-          rbRef.current.setTranslation(respawnTargetRef.current, true)
-          rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
-          rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-        }
-
-        isRespawning.current = false
-        if (playerId === 1) {
-          window.player1Respawning = false
-        } else {
-          window.player2Respawning = false
-        }
-
+      setTimeout(() => {
         if (multiplayer && isCoopRespawn) {
-          // No global transition screen cleanup needed
+          useGameStore.setState({ isTransitioning: false })
         } else {
-          // If we have an active checkpoint, respawn automatically without Game Over!
-          const checkpointPos = useGameStore.getState().checkpointPos
-          const hasCheckpoint = checkpointPos[1] > 3.0
-          if (hasCheckpoint) {
-            useGameStore.setState({ isTransitioning: false })
-          } else {
-            gameOver()
-            useGameStore.setState({ isTransitioning: false })
-          }
+          // If single player or both fell, trigger game over (will respawn at checkpoint on retry)
+          gameOver()
+          useGameStore.setState({ isTransitioning: false })
         }
       }, 600)
       return
@@ -277,8 +176,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
     // ── Multiplayer Tether (elastic chain + rigid limit mechanical force) ──
     if (multiplayer && phase === 'playing') {
       const otherPos = playerId === 1 ? window.player2Pos : window.player1Pos
-      const otherRespawning = playerId === 1 ? window.player2Respawning : window.player1Respawning
-      if (otherPos && otherPos.y > DEATH_Y && !isRespawning.current && !otherRespawning) {
+      if (otherPos && otherPos.y > DEATH_Y) {
         const dx = translation.x - otherPos.x
         const dy = translation.y - otherPos.y
         const dz = translation.z - otherPos.z
@@ -479,7 +377,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
     // Only Player 1 drives height score tracking
     if (playerId === 1) {
-      setHeight(translation.y - 0.6)
+      setHeight(translation.y - 2.5)
     }
   })
 
@@ -502,7 +400,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
   return (
     <RigidBody
       ref={rbRef}
-      position={[playerId === 1 ? -1 : 1, -0.25 + SAFE_SPAWN_OFFSET, 0]}
+      position={[playerId === 1 ? -1 : 1, 2.5, 0]}
       enabledRotations={[false, false, false]}
       linearDamping={0}
       angularDamping={0}

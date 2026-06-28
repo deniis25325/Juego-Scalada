@@ -187,30 +187,19 @@ function Scene({ player1PosRef, player2PosRef }) {
   const phase = useGameStore(s => s.phase)
   const multiplayer = useGameStore(s => s.multiplayer)
   const scenario = useGameStore(s => s.scenario)
-  const dirLightRef = useRef()
 
   const config = SCENE_CONFIGS[scenario] || SCENE_CONFIGS.default
 
-  // Dynamic BGM frequency filtering and dynamic shadow light position following
+  // Dynamic BGM frequency filtering based on height and pause state
   useFrame(() => {
-    const y1 = player1PosRef?.current?.y || 2.5
-    const y2 = (multiplayer && player2PosRef?.current) ? player2PosRef.current.y : y1
-    const maxPlayerY = Math.max(y1, y2)
-    const px = player1PosRef?.current?.x || 0
-    const pz = player1PosRef?.current?.z || 0
-
     if (phase === 'playing') {
+      const y1 = player1PosRef.current.y
+      const y2 = (multiplayer && player2PosRef?.current) ? player2PosRef.current.y : y1
+      const maxPlayerY = Math.max(y1, y2)
       audioSystem.updateMusicIntensity(maxPlayerY - 2.5)
     } else if (phase === 'paused' && audioSystem.filterNode && audioSystem.ctx) {
       // Muffle music on pause
       audioSystem.filterNode.frequency.setTargetAtTime(200, audioSystem.ctx.currentTime, 0.2)
-    }
-
-    // Dynamic light tracking to keep shadows active at any height
-    if (dirLightRef.current) {
-      dirLightRef.current.position.set(px + 15, maxPlayerY + 30, pz + 10)
-      dirLightRef.current.target.position.set(px, maxPlayerY, pz)
-      dirLightRef.current.target.updateMatrixWorld()
     }
   })
 
@@ -222,23 +211,22 @@ function Scene({ player1PosRef, player2PosRef }) {
 
       <ambientLight intensity={config.ambientIntensity} color={config.ambientColor} />
       <directionalLight
-        ref={dirLightRef}
         position={[15, 30, 10]}
         intensity={config.dirLightIntensity}
         color={config.dirLightColor}
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
         shadow-camera-near={0.5}
-        shadow-camera-far={250}
-        shadow-camera-left={-40}
-        shadow-camera-right={40}
-        shadow-camera-top={40}
-        shadow-camera-bottom={-40}
+        shadow-camera-far={500}
+        shadow-camera-left={-50}
+        shadow-camera-right={50}
+        shadow-camera-top={50}
+        shadow-camera-bottom={-50}
       />
       <pointLight position={[0, 5, 0]} intensity={3} color={config.pointLight1Color} distance={30} />
       <pointLight position={[0, 0, 0]} intensity={1.5} color={config.pointLight2Color} distance={20} />
 
-      <Physics gravity={[0, -22, 0]} key={phase === 'paused' ? 'playing' : phase} paused={phase === 'paused'}>
+      <Physics gravity={[0, -22, 0]} key={phase} paused={phase === 'paused'}>
         {(phase === 'playing' || phase === 'paused') && (
           <>
             <Player playerId={1} playerPosRef={player1PosRef} />
@@ -283,7 +271,6 @@ export default function App() {
     const handleKeyDown = (e) => {
       if (e.code === 'Escape') {
         if (phase === 'playing' || phase === 'paused') {
-          document.activeElement?.blur() // Remove focus from any active buttons
           togglePause()
           audioSystem.playSFX('ui')
         }

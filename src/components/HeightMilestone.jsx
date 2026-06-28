@@ -8,15 +8,23 @@ import useGameStore from '../store/useGameStore'
 export default function HeightMilestone() {
   const score = useGameStore(s => s.score)
   const phase = useGameStore(s => s.phase)
+  const levelVersion = useGameStore(s => s.levelVersion)
 
   const [note, setNote]     = useState(null)   // { value, key }
   const lastShown           = useRef(0)
   const timerRef            = useRef()
 
+  const prevVersionRef      = useRef(0)
+
   // Reset when a new game starts
   useEffect(() => {
-    if (phase === 'playing') lastShown.current = 0
-  }, [phase])
+    if (phase === 'playing') {
+      if (levelVersion !== prevVersionRef.current) {
+        lastShown.current = 0
+        prevVersionRef.current = levelVersion
+      }
+    }
+  }, [phase, levelVersion])
 
   // Trigger notification at every 10 m milestone
   useEffect(() => {

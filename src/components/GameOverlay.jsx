@@ -22,7 +22,8 @@ export default function GameOverlay() {
 
   const [exiting, setExiting] = useState(false)
 
-  const handlePlay = () => {
+  const handlePlay = (e) => {
+    if (e && e.currentTarget) e.currentTarget.blur()
     audioSystem.playSFX('ui')
     setExiting(true)
     setTimeout(() => {
@@ -61,13 +62,13 @@ export default function GameOverlay() {
                 <div className="selector-group">
                   <button 
                     className={`selector-btn ${!multiplayer ? 'active' : ''}`}
-                    onClick={() => { audioSystem.playSFX('ui'); setMultiplayer(false); }}
+                    onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setMultiplayer(false); }}
                   >
                     👤 1 Jugador
                   </button>
                   <button 
                     className={`selector-btn ${multiplayer ? 'active' : ''}`}
-                    onClick={() => { audioSystem.playSFX('ui'); setMultiplayer(true); }}
+                    onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setMultiplayer(true); }}
                   >
                     👥 2 Jugadores (Local)
                   </button>
@@ -87,7 +88,7 @@ export default function GameOverlay() {
                     <button
                       key={opt.id}
                       className={`selector-btn scenario-btn ${scenario === opt.id ? 'active' : ''}`}
-                      onClick={() => { audioSystem.playSFX('ui'); setScenario(opt.id); }}
+                      onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setScenario(opt.id); }}
                     >
                       <span className="btn-icon">{opt.icon}</span>
                       <span className="btn-lbl">{opt.label}</span>
@@ -180,21 +181,21 @@ export default function GameOverlay() {
               <div className="pause-menu-buttons">
                 <button 
                   className="btn-play btn-pause-menu" 
-                  onClick={() => { audioSystem.playSFX('ui'); togglePause(); }}
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); togglePause(); }}
                 >
                   ▶&nbsp;&nbsp;CONTINUAR
                 </button>
                 
                 <button 
                   className="btn-play btn-pause-menu btn-secondary" 
-                  onClick={() => { audioSystem.playSFX('ui'); restart(); }}
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); restart(); }}
                 >
                   ↺&nbsp;&nbsp;REINICIAR
                 </button>
 
                 <button 
                   className="btn-play btn-pause-menu btn-danger" 
-                  onClick={() => { audioSystem.playSFX('ui'); exitToMenu(); }}
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); exitToMenu(); }}
                 >
                   🚪&nbsp;&nbsp;SALIR AL MENÚ
                 </button>
@@ -220,7 +221,7 @@ export default function GameOverlay() {
 
               <button 
                 className="btn-play" 
-                onClick={() => { audioSystem.playSFX('ui'); restart(); }}
+                onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); restart(); }}
               >
                 ↺&nbsp;&nbsp;REINTENTAR
               </button>
