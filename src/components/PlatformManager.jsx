@@ -1,34 +1,41 @@
 import { useRef, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import Platform from './Platform'
-import { generateInitialPlatforms, generatePlatform } from '../utils/platformGenerator'
+import { generateInitialPlatforms, generatePlatform, createRandom } from '../utils/platformGenerator'
 import useGameStore from '../store/useGameStore'
 
 const BUFFER_AHEAD = 45   // generate platforms up to this many units above player
 const CULL_DIST    = -25  // remove platforms this many units below player
 
 export default function PlatformManager({ player1PosRef, player2PosRef }) {
-  const [platforms, setPlatforms]   = useState(() => generateInitialPlatforms(35))
+  const activeRoom                  = useGameStore(s => s.activeRoom)
+  const seed                        = activeRoom?.map_seed ? parseInt(activeRoom.map_seed, 10) : null
+  const [platforms, setPlatforms]   = useState(() => generateInitialPlatforms(35, seed))
   const topYRef                     = useRef(0)
   const lastCheckY                  = useRef(-Infinity)
   const phase                       = useGameStore(s => s.phase)
   const multiplayer                 = useGameStore(s => s.multiplayer)
   const levelVersion                = useGameStore(s => s.levelVersion)
   const prevVersionRef              = useRef(0)
+  const rngRef                      = useRef(null)
 
   // ── Reset on new game ────────────────────────────────────────────────
   useEffect(() => {
     if (phase === 'playing') {
       // Only regenerate platforms if the level version changed (real start or reset)
       if (levelVersion !== prevVersionRef.current) {
-        const initial = generateInitialPlatforms(35)
+        // Inicializar generador fresco con la semilla de red para sincronía determinista
+        const freshRng = seed !== null ? createRandom(seed) : Math.random
+        rngRef.current = freshRng
+
+        const initial = generateInitialPlatforms(35, seed)
         setPlatforms(initial)
         topYRef.current   = initial[initial.length - 1].position[1]
         lastCheckY.current = -Infinity
         prevVersionRef.current = levelVersion
       }
     }
-  }, [phase, levelVersion])
+  }, [phase, levelVersion, seed])
 
   // ── Per-frame: generate ahead, cull behind ───────────────────────────
   useFrame(() => {
@@ -66,7 +73,8 @@ export default function PlatformManager({ player1PosRef, player2PosRef }) {
             last.position[1],
             last.position[0],
             last.position[2],
-            last.position[1]
+            last.position[1],
+            rngRef.current || Math.random
           )
           added.push(...newPlats)
           last = newPlats[newPlats.length - 1]

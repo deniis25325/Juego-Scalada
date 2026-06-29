@@ -61,7 +61,7 @@ export default function AdSimulationOverlay({ isOpen, onClose }) {
           <div className="ad-video-placeholder">
             <div className="ad-spinner" />
             <p className="ad-placeholder-text">Simulando reproducción de anuncio...</p>
-            <p className="ad-sponsor-text">Sponsor: Sky Climb Premium App</p>
+            <p className="ad-sponsor-text">Sponsor: Scalada Premium App</p>
             <p className="ad-hint">Al finalizar, podrás continuar tu ascenso desde la última plataforma segura.</p>
           </div>
         </div>

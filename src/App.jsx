@@ -288,6 +288,14 @@ export default function App() {
     checkSession()
   }, [checkSession])
 
+  // ── Detección de dispositivos táctiles ──────────────────────────────
+  useEffect(() => {
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0
+    if (isTouch) {
+      document.documentElement.classList.add('is-touch')
+    }
+  }, [])
+
   // ── Keyboard Escape Pausing ─────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e) => {

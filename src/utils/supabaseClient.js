@@ -17,6 +17,6 @@ export const supabase = isSupabaseConfigured
 
 if (!isSupabaseConfigured) {
   console.warn(
-    'Sky Climb: Supabase no está configurado o contiene los valores por defecto en el archivo .env. Las funciones en línea estarán desactivadas (Modo Invitado Local).'
+    'Scalada: Supabase no está configurado o contiene los valores por defecto en el archivo .env. Las funciones en línea estarán desactivadas (Modo Invitado Local).'
   )
 }

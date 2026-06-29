@@ -3,12 +3,125 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Sky Climb – Juego 3D de plataformas verticales infinitas. Sube lo más alto que puedas." />
-    <title>Sky Climb</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Scalada – Juego 3D de plataformas verticales infinitas. Sube lo más alto que puedas." />
+    <title>Scalada</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #0b0c10;
+        overflow: hidden;
+      }
+      .initial-loader-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at center, #151828 0%, #080910 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+      }
+      .loader-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .loading-logo {
+        filter: drop-shadow(0 0 15px rgba(127, 0, 255, 0.5));
+        animation: logo-pulse 1.8s ease-in-out infinite;
+      }
+      .loading-title {
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: 8px;
+        margin-top: 24px;
+        text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+      }
+      .loading-bar-container {
+        width: 180px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 2px;
+        margin-top: 24px;
+        overflow: hidden;
+      }
+      .loading-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #ff007f, #00f0ff);
+        border-radius: 2px;
+        animation: loading-anim 1.8s infinite ease-in-out;
+        box-shadow: 0 0 8px #00f0ff;
+      }
+      .loading-subtitle {
+        color: rgba(255, 255, 255, 0.4);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 11px;
+        font-weight: 400;
+        letter-spacing: 2px;
+        margin-top: 12px;
+        text-transform: uppercase;
+      }
+      @keyframes logo-pulse {
+        0%, 100% {
+          transform: scale(1) translateY(0);
+          filter: drop-shadow(0 0 12px rgba(127, 0, 255, 0.5));
+        }
+        50% {
+          transform: scale(1.06) translateY(-6px);
+          filter: drop-shadow(0 0 22px rgba(0, 240, 255, 0.8));
+        }
+      }
+      @keyframes loading-anim {
+        0% {
+          transform: translateX(-100%);
+          width: 20%;
+        }
+        50% {
+          width: 55%;
+        }
+        100% {
+          transform: translateX(180%);
+          width: 20%;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="initial-loader-screen">
+        <div class="loader-content">
+          <svg class="loading-logo" viewBox="0 0 100 100" width="90" height="90">
+            <path d="M50 15 L20 48 L38 48 L38 82 L62 82 L62 48 L80 48 Z" 
+                  fill="none" 
+                  stroke="url(#neon-grad)" 
+                  stroke-width="5" 
+                  stroke-linecap="round"
+                  stroke-linejoin="round" />
+            <defs>
+              <linearGradient id="neon-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#ff007f" />
+                <stop offset="50%" stop-color="#7f00ff" />
+                <stop offset="100%" stop-color="#00f0ff" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div class="loading-title">SCALADA</div>
+          <div class="loading-bar-container">
+            <div class="loading-bar-fill"></div>
+          </div>
+          <div class="loading-subtitle">Cargando físicas y texturas...</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { RigidBody, CapsuleCollider } from '@react-three/rapier'
+import { RigidBody, CapsuleCollider, useRapier } from '@react-three/rapier'
 import { useKeyboardControls } from '@react-three/drei'
 import { Vector3 } from 'three'
 import useGameStore from '../store/useGameStore'
@@ -32,10 +32,20 @@ window.player1Respawning = false
 window.player2Respawning = false
 
 export default function Player({ playerId = 1, playerPosRef }) {
+  const { rapier, world } = useRapier()
   const rbRef          = useRef()
   const isGrounded     = useRef(false)
   const groundContacts = useRef(0)
   const wasGroundedRef = useRef(false)  // landing detection
+  const multiplayerMode = useGameStore(s => s.multiplayerMode)
+  const isHost          = useGameStore(s => s.isHost)
+  const isRemote = multiplayerMode === 'online' && (
+    (isHost && playerId === 2) || 
+    (!isHost && playerId === 1)
+  )
+  const lastBroadcastRef = useRef(0)
+  const wallJumpTimerRef = useRef(0)
+  const jumpBufferRef    = useRef(0) // Ventana de 150ms para amortiguar inputs de salto
   const wasJumpRef     = useRef(false)  // prevent hold-to-jump
   const coyoteRef      = useRef(0)      // grace window after leaving platform
   const isRespawning   = useRef(false)
@@ -118,6 +128,10 @@ export default function Player({ playerId = 1, playerPosRef }) {
   useFrame((state, delta) => {
     if (!rbRef.current || phase === 'ready' || phase === 'dead') return
 
+    // Decrement wall jump and jump buffer timers
+    wallJumpTimerRef.current = Math.max(0, wallJumpTimerRef.current - delta)
+    jumpBufferRef.current    = Math.max(0, jumpBufferRef.current - delta)
+
     // ── Respawn Handling (Freeze during transition) ───────────────────
     if (isRespawning.current) {
       rbRef.current.setTranslation(respawnTargetRef.current, true)
@@ -161,8 +175,169 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
     const jump = kJump || touchJump
 
+    // Consumir el estado de salto táctil de inmediato para evitar que se quede pegado si se pierde el evento pointerup
+    if (touchJump && playerId === 1) {
+      useGameStore.setState({ touchJump: false })
+    }
+
     const translation = rbRef.current.translation()
     const linvel      = rbRef.current.linvel()
+    let vx            = linvel.x
+    let vz            = linvel.z
+    let vy            = linvel.y
+
+    // ── REMOTE PLAYER REPLICATION (FASE 3) ──────────────────────────────
+    if (isRemote) {
+      const remoteState = useGameStore.getState().remotePlayerState
+      if (remoteState) {
+        // Interpolación lineal visual (lerp) para mitigar el lag de red
+        const tFactor = 0.22
+        const currentPos = rbRef.current.translation()
+        const targetPos = remoteState.position
+        
+        if (targetPos) {
+          rbRef.current.setTranslation({
+            x: currentPos.x + (targetPos.x - currentPos.x) * tFactor,
+            y: currentPos.y + (targetPos.y - currentPos.y) * tFactor,
+            z: currentPos.z + (targetPos.z - currentPos.z) * tFactor
+          }, true)
+        }
+
+        // Sincronizar velocidad para las piernas/brazos locales
+        if (remoteState.velocity) {
+          rbRef.current.setLinvel(remoteState.velocity, true)
+        }
+
+        // Sincronizar estados booleanos
+        isGrounded.current = remoteState.isGrounded
+        isRespawning.current = remoteState.isRespawning
+        
+        const vx = remoteState.velocity?.x || 0
+        const vz = remoteState.velocity?.z || 0
+        const vy = remoteState.velocity?.y || 0
+        const runSpeed = Math.sqrt(vx * vx + vz * vz)
+        const hasInput = remoteState.hasInput
+        const _moveDir = remoteState.moveDir || { x: 0, y: 0, z: 0 }
+
+        // Actualizaciones estéticas de squash/stretch
+        if (squashGroupRef.current) {
+          const sc  = squashGroupRef.current.scale
+          const spd = Math.min(1, 11 * delta)
+          sc.x += (1 - sc.x) * spd
+          sc.y += (1 - sc.y) * spd
+          sc.z += (1 - sc.z) * spd
+        }
+
+        if (meshRef.current) {
+          if (hasInput) {
+            meshRef.current.rotation.y = Math.atan2(_moveDir.x, _moveDir.z)
+          }
+          const targetLean = hasInput ? -runSpeed * 0.024 : 0
+          meshRef.current.rotation.x +=
+            (targetLean - meshRef.current.rotation.x) * 9 * delta
+        }
+
+        if (jetpackMatRef.current) {
+          const targetEmissive = isGrounded.current ? 0.5 : 3.2
+          jetpackMatRef.current.emissiveIntensity +=
+            (targetEmissive - jetpackMatRef.current.emissiveIntensity) * 5 * delta
+        }
+
+        if (isGrounded.current && runSpeed > 0.2) {
+          walkTimeRef.current = (walkTimeRef.current || 0) + delta * runSpeed * 1.6
+        } else if (isGrounded.current) {
+          if (walkTimeRef.current !== undefined) {
+            walkTimeRef.current = walkTimeRef.current * Math.max(0, 1 - 10 * delta)
+          }
+        }
+
+        let targetLeftLegX = 0
+        let targetRightLegX = 0
+        let targetLeftArmX = 0
+        let targetRightArmX = 0
+        let targetLeftArmZ = 0.1
+        let targetRightArmZ = -0.1
+        let targetHeadX = 0
+        let torsoBob = 0
+
+        if (!isGrounded.current) {
+          if (vy > 1) {
+            targetLeftArmZ = 1.1
+            targetRightArmZ = -1.1
+            targetLeftArmX = -0.3
+            targetRightArmX = -0.3
+            targetLeftLegX = 0.25
+            targetRightLegX = -0.25
+          } else {
+            targetLeftArmZ = 0.9 + Math.sin(state.clock.getElapsedTime() * 15) * 0.15
+            targetRightArmZ = -0.9 - Math.sin(state.clock.getElapsedTime() * 15) * 0.15
+            targetLeftArmX = 0.4
+            targetRightArmX = 0.4
+            targetLeftLegX = -0.3
+            targetRightLegX = 0.15
+          }
+        } else if (runSpeed > 0.2) {
+          const cycle = walkTimeRef.current || 0
+          const swing = Math.sin(cycle) * 0.75
+          targetLeftLegX = swing
+          targetRightLegX = -swing
+          targetLeftArmX = -swing
+          targetRightArmX = swing
+          targetLeftArmZ = 0.15
+          targetRightArmZ = -0.15
+          torsoBob = Math.abs(Math.sin(cycle * 2)) * 0.06
+        } else {
+          const time = state.clock.getElapsedTime()
+          const breathe = Math.sin(time * 2.2)
+          targetLeftArmZ = 0.08 + breathe * 0.03
+          targetRightArmZ = -0.08 - breathe * 0.03
+          targetLeftArmX = breathe * 0.02
+          targetRightArmX = -breathe * 0.02
+          torsoBob = breathe * 0.015
+        }
+
+        const lerpSpeed = 14
+        if (leftLegRef.current) leftLegRef.current.rotation.x += (targetLeftLegX - leftLegRef.current.rotation.x) * lerpSpeed * delta
+        if (rightLegRef.current) rightLegRef.current.rotation.x += (targetRightLegX - rightLegRef.current.rotation.x) * lerpSpeed * delta
+        if (leftArmRef.current) {
+          leftArmRef.current.rotation.x += (targetLeftArmX - leftArmRef.current.rotation.x) * lerpSpeed * delta
+          leftArmRef.current.rotation.z += (targetLeftArmZ - leftArmRef.current.rotation.z) * lerpSpeed * delta
+        }
+        if (rightArmRef.current) {
+          rightArmRef.current.rotation.x += (targetRightArmX - rightArmRef.current.rotation.x) * lerpSpeed * delta
+          rightArmRef.current.rotation.z += (targetRightArmZ - rightArmRef.current.rotation.z) * lerpSpeed * delta
+        }
+        if (headRef.current) {
+          if (!isGrounded.current) {
+            targetHeadX = vy > 0 ? -0.15 : 0.15
+          } else if (runSpeed > 0.2) {
+            targetHeadX = 0.08
+          }
+          headRef.current.rotation.x += (targetHeadX - headRef.current.rotation.x) * lerpSpeed * delta
+          const idleHeadBob = (isGrounded.current && runSpeed <= 0.2) ? Math.sin(state.clock.getElapsedTime() * 2.2) * 0.008 : 0
+          headRef.current.position.y += ((0.45 + idleHeadBob) - headRef.current.position.y) * lerpSpeed * delta
+        }
+        if (torsoRef.current) {
+          torsoRef.current.position.y += ((0.0 + torsoBob) - torsoRef.current.position.y) * lerpSpeed * delta
+        }
+
+        if (playerPosRef) {
+          playerPosRef.current.x = translation.x
+          playerPosRef.current.y = translation.y
+          playerPosRef.current.z = translation.z
+        }
+      }
+      return // Finalizar procesamiento del frame para jugador remoto
+    }
+
+    // ── Timeout connection check ───────────────────────────────────────
+    if (multiplayerMode === 'online' && !isRemote) {
+      const lastTs = useGameStore.getState().lastPacketTimestamp
+      const isOnlineActive = useGameStore.getState().activeRoom?.status === 'ready'
+      if (isOnlineActive && lastTs > 0 && Date.now() - lastTs > 5000) {
+        useGameStore.getState().handleOnlineDisconnect("Se perdió la conexión con el otro jugador (Timeout de 5 segundos).")
+      }
+    }
 
     // Save positions to window for coop coordinate checks
     if (playerId === 1) {
@@ -253,6 +428,101 @@ export default function Player({ playerId = 1, playerPosRef }) {
       return
     }
 
+    // ── Grounded check (Raycast + Collision Fallback) ──────────────────
+    let rayGrounded = false
+    if (world && rapier && rbRef.current) {
+      // Proyectamos el rayo vertical desde el centro inferior de la cápsula (translation.y - 0.5)
+      // con dirección estrictamente descendente (0, -1, 0)
+      const startY = translation.y - 0.5
+      const ray = new rapier.Ray(
+        { x: translation.x, y: startY, z: translation.z },
+        { x: 0, y: -1, z: 0 }
+      )
+      
+      const maxToi = 0.38 // 0.23 + 0.15 de tolerancia (15cm por debajo del pie de la cápsula)
+      
+      const hit = world.castRayAndGetNormal(
+        ray,
+        maxToi,
+        true, // solid
+        null, // queryGroups
+        null, // filterFlags
+        null, // filterCollider
+        rbRef.current // excluir propio RigidBody
+      )
+      
+      if (hit && hit.toi < maxToi) {
+        // Validamos que el impacto sea contra una superficie plana (normal vertical Ny ~ 1.0)
+        // para ignorar paredes y plataformas colindantes laterales
+        if (hit.normal && Math.abs(hit.normal.y - 1.0) < 0.15) {
+          rayGrounded = true
+        }
+      }
+    }
+
+    const GROUND_VELOCITY_THRESHOLD = 0.15
+    isGrounded.current = rayGrounded || (
+      groundContacts.current > 0 &&
+      Math.abs(vy) < GROUND_VELOCITY_THRESHOLD &&
+      vy <= 0.01
+    )
+
+    // ── Wall detection (Raycast + Collision contacts fallback) ────────
+    let isTouchingWall = (groundContacts.current > 0 && !isGrounded.current)
+    const wallNormal = new Vector3()
+    
+    if (!isGrounded.current && world && rapier && rbRef.current) {
+      const dirs = [
+        { x: 1, y: 0, z: 0 },  // Right
+        { x: -1, y: 0, z: 0 }, // Left
+        { x: 0, y: 0, z: 1 },  // Forward
+        { x: 0, y: 0, z: -1 }  // Backward
+      ]
+      
+      const maxToi = 0.56 // 0.38 radio de cápsula + 0.18 de tolerancia
+      let closestToi = Infinity
+      const startPos = { x: translation.x, y: translation.y, z: translation.z }
+      
+      for (const dir of dirs) {
+        const ray = new rapier.Ray(startPos, dir)
+        const hit = world.castRayAndGetNormal(
+          ray,
+          maxToi,
+          true,
+          null,
+          null,
+          null,
+          rbRef.current
+        )
+        
+        if (hit && hit.toi < closestToi) {
+          // Validar que la superficie sea vertical (muro)
+          if (hit.normal && Math.abs(hit.normal.y) < 0.25) {
+            closestToi = hit.toi
+            isTouchingWall = true
+            wallNormal.set(hit.normal.x, 0, hit.normal.z).normalize()
+          }
+        }
+      }
+    }
+
+    // ── Broadcast state throttled (12 updates/sec) ─────────────────────
+    if (multiplayerMode === 'online' && !isRemote) {
+      lastBroadcastRef.current += delta
+      if (lastBroadcastRef.current >= 0.08) {
+        lastBroadcastRef.current = 0
+        useGameStore.getState().broadcastLocalState({
+          userId: useGameStore.getState().user?.id,
+          position: { x: translation.x, y: translation.y, z: translation.z },
+          velocity: { x: linvel.x, y: linvel.y, z: linvel.z },
+          hasInput,
+          moveDir: { x: _moveDir.x, y: _moveDir.y, z: _moveDir.z },
+          isGrounded: isGrounded.current,
+          isRespawning: isRespawning.current
+        })
+      }
+    }
+
     // ── Coyote time ────────────────────────────────────────────────────
     if (isGrounded.current) {
       coyoteRef.current = 0.14
@@ -303,14 +573,20 @@ export default function Player({ playerId = 1, playerPosRef }) {
     }
 
     // ── Horizontal velocity ─────────────────────────────────────────────
-    let vx = hasInput
-      ? _moveDir.x * currentSpeed
-      : linvel.x * Math.max(0, 1 - DAMPING * delta)
-    let vz = hasInput
-      ? _moveDir.z * currentSpeed
-      : linvel.z * Math.max(0, 1 - DAMPING * delta)
+    if (wallJumpTimerRef.current > 0) {
+      // Aplicar inercia/fricción durante el bloqueo de input
+      vx = vx * Math.max(0, 1 - DAMPING * delta)
+      vz = vz * Math.max(0, 1 - DAMPING * delta)
+    } else {
+      vx = hasInput
+        ? _moveDir.x * currentSpeed
+        : vx * Math.max(0, 1 - DAMPING * delta)
+      vz = hasInput
+        ? _moveDir.z * currentSpeed
+        : vz * Math.max(0, 1 - DAMPING * delta)
+    }
 
-    let vy = linvel.y
+    // vy ya fue declarado en el alcance superior como linvel.y
 
     // ── Multiplayer Tether (elastic chain + rigid limit mechanical force) ──
     if (multiplayer && phase === 'playing') {
@@ -358,21 +634,39 @@ export default function Player({ playerId = 1, playerPosRef }) {
       vy = Math.max(vy * (1 + 2.8 * delta), -42)
     }
 
-    // ── Jump ────────────────────────────────────────────────────────────
-    const canJump = isGrounded.current || coyoteRef.current > 0
-    if (jump && !wasJumpRef.current && canJump) {
-      vy = JUMP_VEL
-      coyoteRef.current = 0
-
-      // Vertical stretch on takeoff
-      if (squashGroupRef.current) {
-        squashGroupRef.current.scale.set(0.70, 1.42, 0.70)
-      }
-      emitDust(translation.x, translation.y, translation.z, 'jump')
-      audioSystem.playSFX('jump')
-      wasJumpRef.current = true
+    // ── Jump / Wall Jump (Con Input Buffering) ──────────────────────────
+    const isPressingJump = kJump || touchJump
+    if (isPressingJump && !wasJumpRef.current) {
+      jumpBufferRef.current = 0.15 // Almacenar el salto durante 150ms
     }
-    if (!jump) wasJumpRef.current = false
+    wasJumpRef.current = isPressingJump
+
+    const canJump = isGrounded.current || coyoteRef.current > 0
+
+    if (jumpBufferRef.current > 0) {
+      if (canJump) {
+        vy = JUMP_VEL
+        coyoteRef.current = 0
+        jumpBufferRef.current = 0 // Consumir el buffer
+        
+        if (squashGroupRef.current) {
+          squashGroupRef.current.scale.set(0.70, 1.42, 0.70)
+        }
+        emitDust(translation.x, translation.y, translation.z, 'jump')
+        audioSystem.playSFX('jump')
+      } else if (isTouchingWall) {
+        // Wall Jump vertical climb!
+        vy = JUMP_VEL * 0.85
+        wallJumpTimerRef.current = 0
+        jumpBufferRef.current = 0 // Consumir el buffer
+        
+        if (squashGroupRef.current) {
+          squashGroupRef.current.scale.set(0.85, 1.25, 0.85)
+        }
+        emitDust(translation.x, translation.y, translation.z, 'jump')
+        audioSystem.playSFX('jump')
+      }
+    }
 
     rbRef.current.setLinvel({ x: vx, y: vy, z: vz }, true)
 
@@ -549,10 +843,11 @@ export default function Player({ playerId = 1, playerPosRef }) {
       enabledRotations={[false, false, false]}
       linearDamping={0}
       angularDamping={0}
-      onCollisionEnter={handleCollisionEnter}
-      onCollisionExit={handleCollisionExit}
+      onCollisionEnter={isRemote ? undefined : handleCollisionEnter}
+      onCollisionExit={isRemote ? undefined : handleCollisionExit}
       colliders={false}
       mass={1}
+      type={isRemote ? "kinematicPosition" : "dynamic"}
     >
       <CapsuleCollider args={[0.35, 0.38]} />
 
