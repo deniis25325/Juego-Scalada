@@ -39,20 +39,30 @@ const useGameStore = create((set, get) => ({
   lastPacketTimestamp: 0,
   hasSavedRoom: false,
   playerStatus: 'ACTIVE', // 'ACTIVE' | 'AFK'
+  p1: { height: 0, score: 0, isDead: false },
+  p2: { height: 0, score: 0, isDead: false },
   p1Score: 0,
   p1Height: 0,
   p2Score: 0,
   p2Height: 0,
+  hasTriggeredGameOver: false,
+  lastP1Timestamp: 0,
+  lastP2Timestamp: 0,
 
   startGame: () => {
     set((state) => ({ 
       phase: 'playing', 
       score: 0, 
       height: 0, 
+      p1: { height: 0, score: 0, isDead: false },
+      p2: { height: 0, score: 0, isDead: false },
       p1Score: 0,
       p1Height: 0,
       p2Score: 0,
       p2Height: 0,
+      hasTriggeredGameOver: false,
+      lastP1Timestamp: 0,
+      lastP2Timestamp: 0,
       checkpointPos: [0, -0.25, 0], 
       levelVersion: state.levelVersion + 1, 
       saveScoreStatus: 'idle', 
@@ -61,17 +71,59 @@ const useGameStore = create((set, get) => ({
     get().initGameRoomChannel();
   },
 
-  gameOver: () => {
-    const { score, highScore, user, saveScoreToSupabase, multiplayerMode } = get()
-    set({ phase: 'dead', highScore: Math.max(score, highScore) })
-    if (user) {
-      saveScoreToSupabase(score)
+  updatePlayer1State: (newState) => set((state) => {
+    const nextP1 = { ...state.p1, ...newState }
+    let updateObj = {
+      p1: nextP1,
+      p1Score: nextP1.score,
+      p1Height: nextP1.height
     }
-    
-    // Si estamos en modo online, notificar al otro jugador de que la partida terminó
-    if (multiplayerMode === 'online') {
+    if (state.multiplayerMode === 'none' || (state.multiplayerMode === 'online' && state.isHost)) {
+      updateObj.height = nextP1.height
+      updateObj.score = nextP1.score
+    } else if (state.multiplayerMode === 'local') {
+      updateObj.height = Math.max(nextP1.height, state.p2.height)
+      updateObj.score = Math.max(nextP1.score, state.p2.score)
+    }
+    return updateObj
+  }),
+
+  updatePlayer2State: (newState) => set((state) => {
+    const nextP2 = { ...state.p2, ...newState }
+    let updateObj = {
+      p2: nextP2,
+      p2Score: nextP2.score,
+      p2Height: nextP2.height
+    }
+    if (state.multiplayerMode === 'online' && !state.isHost) {
+      updateObj.height = nextP2.height
+      updateObj.score = nextP2.score
+    } else if (state.multiplayerMode === 'local') {
+      updateObj.height = Math.max(state.p1.height, nextP2.height)
+      updateObj.score = Math.max(state.p1.score, nextP2.score)
+    }
+    return updateObj
+  }),
+
+  checkGameOverCondition: () => {
+    const { p1, p2, hasTriggeredGameOver } = get()
+    if (p1.isDead && p2.isDead && !hasTriggeredGameOver) {
+      get().triggerGameOver()
+    }
+  },
+
+  triggerGameOver: () => {
+    if (get().hasTriggeredGameOver) return
+    set({ hasTriggeredGameOver: true })
+
+    if (get().multiplayerMode === 'online') {
       get().broadcastGameOver()
     }
+    get().gameOverLocally()
+  },
+
+  gameOver: () => {
+    get().triggerGameOver()
   },
 
   gameOverLocally: () => {
@@ -98,6 +150,15 @@ const useGameStore = create((set, get) => ({
       phase: 'playing', 
       score: 0, 
       height: 0, 
+      p1: { height: 0, score: 0, isDead: false },
+      p2: { height: 0, score: 0, isDead: false },
+      p1Score: 0,
+      p1Height: 0,
+      p2Score: 0,
+      p2Height: 0,
+      hasTriggeredGameOver: false,
+      lastP1Timestamp: 0,
+      lastP2Timestamp: 0,
       checkpointPos: [0, -0.25, 0], 
       levelVersion: state.levelVersion + 1, 
       saveScoreStatus: 'idle', 
@@ -113,6 +174,15 @@ const useGameStore = create((set, get) => ({
       phase: 'playing', 
       score: 0, 
       height: 0, 
+      p1: { height: 0, score: 0, isDead: false },
+      p2: { height: 0, score: 0, isDead: false },
+      p1Score: 0,
+      p1Height: 0,
+      p2Score: 0,
+      p2Height: 0,
+      hasTriggeredGameOver: false,
+      lastP1Timestamp: 0,
+      lastP2Timestamp: 0,
       checkpointPos: [0, -0.25, 0], 
       levelVersion: state.levelVersion + 1, 
       saveScoreStatus: 'idle', 
@@ -133,6 +203,11 @@ const useGameStore = create((set, get) => ({
   continueGame: () => {
     set((state) => ({ 
       phase: 'playing', 
+      p1: { ...state.p1, isDead: false },
+      p2: { ...state.p2, isDead: false },
+      p1Score: state.p1.score,
+      p2Score: state.p2.score,
+      hasTriggeredGameOver: false,
       reviveCount: state.reviveCount + 1, 
       saveScoreStatus: 'idle' 
     }))
@@ -144,6 +219,11 @@ const useGameStore = create((set, get) => ({
   continueGameLocally: () => {
     set((state) => ({ 
       phase: 'playing', 
+      p1: { ...state.p1, isDead: false },
+      p2: { ...state.p2, isDead: false },
+      p1Score: state.p1.score,
+      p2Score: state.p2.score,
+      hasTriggeredGameOver: false,
       reviveCount: state.reviveCount + 1, 
       saveScoreStatus: 'idle' 
     }))
@@ -165,38 +245,20 @@ const useGameStore = create((set, get) => ({
       height: rounded,
       score: Math.max(state.score, rounded),
     }))
+    // Also keep P1 updated if single player for compatibility
+    if (get().multiplayerMode === 'none') {
+      get().updatePlayer1State({ height: rounded, score: Math.max(get().p1.score, rounded) })
+    }
   },
 
   setPlayer1Height: (h) => {
     const rounded = Math.max(0, Math.floor(h))
-    set((state) => {
-      const newP1Height = rounded
-      const newP1Score = Math.max(state.p1Score, rounded)
-      const maxH = Math.max(newP1Height, state.p2Height)
-      const maxS = Math.max(newP1Score, state.p2Score)
-      return {
-        p1Height: newP1Height,
-        p1Score: newP1Score,
-        height: maxH,
-        score: Math.max(state.score, maxS)
-      }
-    })
+    get().updatePlayer1State({ height: rounded, score: Math.max(get().p1.score, rounded) })
   },
 
   setPlayer2Height: (h) => {
     const rounded = Math.max(0, Math.floor(h))
-    set((state) => {
-      const newP2Height = rounded
-      const newP2Score = Math.max(state.p2Score, rounded)
-      const maxH = Math.max(state.p1Height, newP2Height)
-      const maxS = Math.max(state.p1Score, newP2Score)
-      return {
-        p2Height: newP2Height,
-        p2Score: newP2Score,
-        height: maxH,
-        score: Math.max(state.score, maxS)
-      }
-    })
+    get().updatePlayer2State({ height: rounded, score: Math.max(get().p2.score, rounded) })
   },
 
   setMultiplayerMode: (mode) => set({ 
@@ -216,10 +278,15 @@ const useGameStore = create((set, get) => ({
     phase: 'ready', 
     score: 0, 
     height: 0, 
+    p1: { height: 0, score: 0, isDead: false },
+    p2: { height: 0, score: 0, isDead: false },
     p1Score: 0,
     p1Height: 0,
     p2Score: 0,
     p2Height: 0,
+    hasTriggeredGameOver: false,
+    lastP1Timestamp: 0,
+    lastP2Timestamp: 0,
     checkpointPos: [0, -0.25, 0], 
     saveScoreStatus: 'idle',
     multiplayerMode: 'none',
@@ -707,37 +774,39 @@ const useGameStore = create((set, get) => ({
 
     roomChannel
       .on('broadcast', { event: 'player_state' }, ({ payload }) => {
+        const state = get()
         if (payload.userId !== user.id) {
+          // Anti-out-of-order packet protection
+          if (payload.timestamp !== undefined) {
+            if (payload.playerId === 1) {
+              if (payload.timestamp < state.lastP1Timestamp) return
+              set({ lastP1Timestamp: payload.timestamp })
+            } else if (payload.playerId === 2) {
+              if (payload.timestamp < state.lastP2Timestamp) return
+              set({ lastP2Timestamp: payload.timestamp })
+            }
+          }
+
           set({
             remotePlayerState: payload,
             lastPacketTimestamp: Date.now()
           })
           
-          // Sincronizar altura y puntaje directamente desde el payload remoto
-          if (payload.height !== undefined && payload.score !== undefined) {
-            if (get().isHost) {
-              set((state) => {
-                const maxH = Math.max(state.p1Height, payload.height)
-                const maxS = Math.max(state.p1Score, payload.score)
-                return {
-                  p2Height: payload.height,
-                  p2Score: payload.score,
-                  height: maxH,
-                  score: Math.max(state.score, maxS)
-                }
-              })
-            } else {
-              set((state) => {
-                const maxH = Math.max(payload.height, state.p2Height)
-                const maxS = Math.max(payload.score, state.p2Score)
-                return {
-                  p1Height: payload.height,
-                  p1Score: payload.score,
-                  height: maxH,
-                  score: Math.max(state.score, maxS)
-                }
-              })
-            }
+          // Sincronizar altura, puntaje y estado de muerte del jugador remoto
+          if (payload.playerId === 1 && !state.isHost) {
+            get().updatePlayer1State({
+              height: payload.height ?? state.p1.height,
+              score: payload.score ?? state.p1.score,
+              isDead: payload.isDead ?? state.p1.isDead
+            })
+            get().checkGameOverCondition()
+          } else if (payload.playerId === 2 && state.isHost) {
+            get().updatePlayer2State({
+              height: payload.height ?? state.p2.height,
+              score: payload.score ?? state.p2.score,
+              isDead: payload.isDead ?? state.p2.isDead
+            })
+            get().checkGameOverCondition()
           }
         }
       })
@@ -799,6 +868,11 @@ const useGameStore = create((set, get) => ({
   },
 
   broadcastLocalState: (payload) => {
+    const state = get()
+    const localPlayerId = state.multiplayerMode === 'online' ? (state.isHost ? 1 : 2) : null
+    if (localPlayerId !== null && localPlayerId !== payload.playerId) {
+      return
+    }
     if (window.roomGameChannel && isSupabaseConfigured) {
       window.roomGameChannel.send({
         type: 'broadcast',

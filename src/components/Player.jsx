@@ -78,6 +78,11 @@ export default function Player({ playerId = 1, playerPosRef }) {
   const levelVersion    = useGameStore(s => s.levelVersion)
   const reviveCount     = useGameStore(s => s.reviveCount)
 
+  const p1 = useGameStore(s => s.p1)
+  const p2 = useGameStore(s => s.p2)
+  const isDead = playerId === 1 ? p1.isDead : p2.isDead
+  const hasHandledDeathRef = useRef(false)
+
   // Reset physics on new game / retry / revive
   useEffect(() => {
     if (phase === 'playing' && rbRef.current) {
@@ -86,6 +91,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
       // Reset respawn state
       isRespawning.current = false
+      hasHandledDeathRef.current = false
       if (playerId === 1) {
         window.player1Respawning = false
       } else {
@@ -129,6 +135,31 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
   useFrame((state, delta) => {
     if (!rbRef.current || phase === 'ready' || phase === 'dead') return
+
+    // If player is dead/eliminated, freeze position once and hide visual group
+    if (isDead) {
+      if (!hasHandledDeathRef.current) {
+        rbRef.current.setTranslation({ x: 0, y: -100, z: 0 }, true)
+        rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        hasHandledDeathRef.current = true
+      }
+      
+      // Keep position refs updated so other players and camera know we are down
+      if (playerPosRef) {
+        playerPosRef.current.x = 0
+        playerPosRef.current.y = -100
+        playerPosRef.current.z = 0
+      }
+      if (playerId === 1) {
+        window.player1Pos = { x: 0, y: -100, z: 0 }
+        window.player1Respawning = false
+      } else {
+        window.player2Pos = { x: 0, y: -100, z: 0 }
+        window.player2Respawning = false
+      }
+      return
+    }
 
     // Decrement wall jump and jump buffer timers
     wallJumpTimerRef.current = Math.max(0, wallJumpTimerRef.current - delta)
@@ -377,81 +408,71 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
     // ── Safe Fall & Respawn (Bug Fix) ──────────────────────────────────
     if (translation.y < DEATH_Y && !isRespawning.current) {
-      isRespawning.current = true
-      if (playerId === 1) {
-        window.player1Respawning = true
-      } else {
-        window.player2Respawning = true
-      }
-
-      audioSystem.playSFX('fall')
-
-      // Reset internal states to prevent pre-existing jump or coyote calculations on respawn
-      isGrounded.current = false
-      groundContacts.current = 0
-      wasGroundedRef.current = false
-      wasJumpRef.current = false
-      coyoteRef.current = 0
-
-      // Freeze all movement immediately
-      rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
-      rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-
-      const checkpointPos = useGameStore.getState().checkpointPos
-
-      let respawnX = checkpointPos[0]
-      let respawnY = checkpointPos[1] + SAFE_SPAWN_OFFSET
-      let respawnZ = checkpointPos[2]
-      let isCoopRespawn = false
-
       if (multiplayer) {
-        const otherPos = playerId === 1 ? window.player2Pos : window.player1Pos
-        const otherRespawning = playerId === 1 ? window.player2Respawning : window.player1Respawning
-        // If buddy is still alive and not respawning, respawn on top of them!
-        if (otherPos && otherPos.y > DEATH_Y && !otherRespawning) {
-          respawnX = otherPos.x
-          respawnY = otherPos.y + 2.0
-          respawnZ = otherPos.z
-          isCoopRespawn = true
-        }
-      }
-
-      // Record coordinate target to hold player in place during transition
-      respawnTargetRef.current = { x: respawnX, y: respawnY, z: respawnZ }
-
-      // If both fell or single player, show the black screen transition
-      if (!isCoopRespawn) {
-        useGameStore.setState({ isTransitioning: true })
-      }
-
-      rbRef.current.setTranslation(respawnTargetRef.current, true)
-      
-      // Local effect on buddy respawn destination
-      emitDust(respawnX, respawnY - 1.0, respawnZ, 'land')
-
-      respawnTimeoutRef.current = setTimeout(() => {
-        // Re-apply exact position & zero velocity one final time before unfreezing
-        if (rbRef.current) {
-          rbRef.current.setTranslation(respawnTargetRef.current, true)
-          rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
-          rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-        }
-
-        isRespawning.current = false
+        audioSystem.playSFX('fall')
+        
+        // Mark as dead in store (triggers camera focus to other player)
         if (playerId === 1) {
-          window.player1Respawning = false
+          useGameStore.getState().updatePlayer1State({ isDead: true })
         } else {
-          window.player2Respawning = false
+          useGameStore.getState().updatePlayer2State({ isDead: true })
         }
 
-        if (multiplayer && isCoopRespawn) {
-          // No global transition screen cleanup needed
-        } else {
-          // Fall deaths ALWAYS trigger Game Over (since checkpoints are removed, ad needed to continue)
+        // Broadcast death immediately if online and is the local player control
+        if (multiplayerMode === 'online' && !isRemote) {
+          useGameStore.getState().broadcastLocalState({
+            playerId: playerId,
+            userId: useGameStore.getState().user?.id,
+            position: { x: translation.x, y: translation.y, z: translation.z },
+            velocity: { x: 0, y: 0, z: 0 },
+            hasInput: false,
+            moveDir: { x: 0, y: 0, z: 0 },
+            isGrounded: false,
+            isRespawning: false,
+            height: playerId === 1 ? useGameStore.getState().p1.height : useGameStore.getState().p2.height,
+            score: playerId === 1 ? useGameStore.getState().p1.score : useGameStore.getState().p2.score,
+            isDead: true,
+            timestamp: Date.now()
+          })
+        }
+
+        // Check if both players are dead to trigger game over
+        useGameStore.getState().checkGameOverCondition()
+      } else {
+        // Single player: normal respawn flow
+        isRespawning.current = true
+        audioSystem.playSFX('fall')
+
+        // Reset internal states to prevent pre-existing jump or coyote calculations on respawn
+        isGrounded.current = false
+        groundContacts.current = 0
+        wasGroundedRef.current = false
+        wasJumpRef.current = false
+        coyoteRef.current = 0
+
+        // Freeze all movement immediately
+        rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
+
+        const checkpointPos = useGameStore.getState().checkpointPos
+        respawnTargetRef.current = { x: checkpointPos[0], y: checkpointPos[1] + SAFE_SPAWN_OFFSET, z: checkpointPos[2] }
+
+        useGameStore.setState({ isTransitioning: true })
+        rbRef.current.setTranslation(respawnTargetRef.current, true)
+        emitDust(respawnTargetRef.current.x, respawnTargetRef.current.y - 1.0, respawnTargetRef.current.z, 'land')
+
+        respawnTimeoutRef.current = setTimeout(() => {
+          if (rbRef.current) {
+            rbRef.current.setTranslation(respawnTargetRef.current, true)
+            rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+            rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
+          }
+
+          isRespawning.current = false
           gameOver()
           useGameStore.setState({ isTransitioning: false })
-        }
-      }, 600)
+        }, 600)
+      }
       return
     }
 
@@ -847,12 +868,13 @@ export default function Player({ playerId = 1, playerPosRef }) {
       useGameStore.setState({ checkpointPos: [translation.x, translation.y, translation.z] })
     }
 
-    // ── Broadcast state throttled (12 updates/sec) ─────────────────────
+    // ── Broadcast state throttled (10 updates/sec - 100ms) ─────────────
     if (multiplayerMode === 'online' && !isRemote) {
       lastBroadcastRef.current += delta
-      if (lastBroadcastRef.current >= 0.08) {
+      if (lastBroadcastRef.current >= 0.1) {
         lastBroadcastRef.current = 0
         useGameStore.getState().broadcastLocalState({
+          playerId: playerId,
           userId: useGameStore.getState().user?.id,
           position: { x: translation.x, y: translation.y, z: translation.z },
           velocity: { x: vx, y: vy, z: vz },
@@ -860,8 +882,10 @@ export default function Player({ playerId = 1, playerPosRef }) {
           moveDir: { x: _moveDir.x, y: _moveDir.y, z: _moveDir.z },
           isGrounded: isGrounded.current,
           isRespawning: isRespawning.current,
-          height: useGameStore.getState().height,
-          score: useGameStore.getState().score
+          height: playerId === 1 ? useGameStore.getState().p1.height : useGameStore.getState().p2.height,
+          score: playerId === 1 ? useGameStore.getState().p1.score : useGameStore.getState().p2.score,
+          isDead: false,
+          timestamp: Date.now()
         })
       }
     }
@@ -898,7 +922,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
     >
       <CapsuleCollider args={[0.35, 0.38]} />
 
-      <group ref={squashGroupRef}>
+      <group ref={squashGroupRef} visible={!isDead}>
         <group ref={meshRef}>
           {/* Roblox Humanoid Root Torso Group */}
           <group ref={torsoRef}>

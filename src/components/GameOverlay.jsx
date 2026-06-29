@@ -14,6 +14,8 @@ export default function GameOverlay() {
   const multiplayer     = useGameStore(s => s.multiplayer)
   const scenario        = useGameStore(s => s.scenario)
   const isTransitioning = useGameStore(s => s.isTransitioning)
+  const p1              = useGameStore(s => s.p1)
+  const p2              = useGameStore(s => s.p2)
 
   const startGame       = useGameStore(s => s.startGame)
   const restart         = useGameStore(s => s.restart)
@@ -413,16 +415,46 @@ export default function GameOverlay() {
             <div className="overlay-content dead-screen" key="dead">
               <h2 className="game-over-title">GAME OVER</h2>
 
-              <div className="score-block">
-                <div className="score-row">
-                  <span className="score-lbl">Puntuación</span>
-                  <span className="score-num">{score}</span>
+              {multiplayer ? (
+                <div className="multiplayer-results-block" style={{ margin: '15px 0', width: '100%', maxWidth: '300px' }}>
+                  <p className="controls-card-title" style={{ color: '#00ffff', marginBottom: '12px', fontSize: '12px', letterSpacing: '1px' }}>CLASIFICACIÓN FINAL</p>
+                  {(() => {
+                    const playersResults = [
+                      { id: 'p1', name: 'Jugador 1', score: p1.score, isLocal: multiplayerMode === 'local' || (multiplayerMode === 'online' && isHost), color: '#00ffff' },
+                      { id: 'p2', name: 'Jugador 2', score: p2.score, isLocal: multiplayerMode === 'local' || (multiplayerMode === 'online' && !isHost), color: '#ff3366' }
+                    ]
+                    playersResults.sort((a, b) => b.score - a.score)
+                    return playersResults.map((p, idx) => (
+                      <div key={p.id} className="score-row" style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        padding: '10px 14px', 
+                        background: 'rgba(255,255,255,0.05)', 
+                        borderRadius: '8px',
+                        marginBottom: '8px',
+                        border: p.isLocal && multiplayerMode === 'online' ? '1px solid rgba(0,255,255,0.3)' : '1px solid transparent'
+                      }}>
+                        <span style={{ fontWeight: 'bold', color: p.color }}>
+                          {idx === 0 ? '🏆 1º ' : '🥈 2º '} {p.name} {p.isLocal && multiplayerMode === 'online' && <span style={{ fontSize: '10px', opacity: 0.6 }}>(Tú)</span>}
+                        </span>
+                        <span className="score-num" style={{ fontSize: '20px', fontFamily: 'Orbitron', fontWeight: 'bold', color: '#fff' }}>{p.score} pts</span>
+                      </div>
+                    ))
+                  })()}
                 </div>
-                <div className="score-row">
-                  <span className="score-lbl">Récord</span>
-                  <span className="score-num record">{highScore}</span>
+              ) : (
+                <div className="score-block">
+                  <div className="score-row">
+                    <span className="score-lbl">Puntuación</span>
+                    <span className="score-num">{score}</span>
+                  </div>
+                  <div className="score-row">
+                    <span className="score-lbl">Récord</span>
+                    <span className="score-num record">{highScore}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {user && (
                 <div className="supabase-save-status">

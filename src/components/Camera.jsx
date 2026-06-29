@@ -21,6 +21,8 @@ export default function Camera({ player1PosRef, player2PosRef }) {
   const { camera } = useThree()
   const phase        = useGameStore(s => s.phase)
   const multiplayer  = useGameStore(s => s.multiplayer)
+  const p1Dead       = useGameStore(s => s.p1.isDead)
+  const p2Dead       = useGameStore(s => s.p2.isDead)
   const prevPhaseRef = useRef(null)
   const introTimer   = useRef(0)   // counts down; while > 0 = intro is playing
   const prevY        = useRef(0)
@@ -38,15 +40,21 @@ export default function Camera({ player1PosRef, player2PosRef }) {
     let dist = 0
 
     if (multiplayer && p2 && p2.x !== undefined) {
-      const p1DeadOrRespawning = window.player1Respawning || p1.y < -15
-      const p2DeadOrRespawning = window.player2Respawning || p2.y < -15
+      const p1DeadOrRespawning = p1Dead || window.player1Respawning || p1.y < -15
+      const p2DeadOrRespawning = p2Dead || window.player2Respawning || p2.y < -15
 
-      if (p1DeadOrRespawning && !p2DeadOrRespawning) {
+      if (p1DeadOrRespawning && p2DeadOrRespawning) {
+        const checkpointPos = useGameStore.getState().checkpointPos
+        cx = checkpointPos[0]
+        cy = checkpointPos[1] + 1.5
+        cz = checkpointPos[2]
+        dist = 0
+      } else if (p1DeadOrRespawning) {
         cx = p2.x
         cy = p2.y
         cz = p2.z
         dist = 0
-      } else if (p2DeadOrRespawning && !p1DeadOrRespawning) {
+      } else if (p2DeadOrRespawning) {
         cx = p1.x
         cy = p1.y
         cz = p1.z
