@@ -37,6 +37,8 @@ const useGameStore = create((set, get) => ({
   matchmakingStatus: 'idle', // 'idle' | 'searching' | 'found' | 'room_created' | 'playing' | 'disconnected'
   remotePlayerState: null,
   lastPacketTimestamp: 0,
+  hasSavedRoom: false,
+  playerStatus: 'ACTIVE', // 'ACTIVE' | 'AFK'
 
   startGame: () => {
     set((state) => ({ 
@@ -106,6 +108,88 @@ const useGameStore = create((set, get) => ({
   setTouchJump: (val) => set({ touchJump: val }),
 
   // Online Multiplayer Database Actions
+  saveActiveRoomToLocalStorage: (room) => {
+    const user = get().user
+    if (!room || !user) return
+    localStorage.setItem('scalada_active_room', JSON.stringify({
+      roomId: room.id,
+      playerId: user.id,
+      mode: 'online',
+      timestamp: Date.now(),
+      host_id: room.host_id,
+      player_2_id: room.player_2_id,
+      map_seed: room.map_seed,
+      player_count: room.player_count
+    }))
+    set({ hasSavedRoom: true })
+  },
+
+  checkSavedRoom: () => {
+    const saved = localStorage.getItem('scalada_active_room')
+    set({ hasSavedRoom: !!saved })
+  },
+
+  rejoinActiveRoom: async () => {
+    const user = get().user
+    if (!user) return false
+    
+    const saved = localStorage.getItem('scalada_active_room')
+    if (!saved) return false
+    
+    try {
+      const roomData = JSON.parse(saved)
+      
+      // Verificar si la sala existe en Supabase y no está cerrada
+      if (isSupabaseConfigured) {
+        const { data: remoteRoom, error } = await supabase
+          .from('rooms')
+          .select()
+          .eq('id', roomData.roomId)
+          .single()
+          
+        if (error || !remoteRoom || remoteRoom.status === 'closed') {
+          // Si no existe o está cerrada, limpiar storage
+          localStorage.removeItem('scalada_active_room')
+          set({ hasSavedRoom: false })
+          return false
+        }
+        
+        // Restaurar estado de la sala activa
+        set({
+          activeRoom: remoteRoom,
+          isHost: remoteRoom.host_id === user.id,
+          matchmakingStatus: 'playing',
+          multiplayerMode: 'online',
+          multiplayer: true
+        })
+      } else {
+        // En modo offline/simulación
+        set({
+          activeRoom: {
+            id: roomData.roomId,
+            host_id: roomData.host_id,
+            player_2_id: roomData.player_2_id,
+            status: 'ready',
+            map_seed: roomData.map_seed,
+            player_count: roomData.player_count
+          },
+          isHost: roomData.host_id === user.id,
+          matchmakingStatus: 'playing',
+          multiplayerMode: 'online',
+          multiplayer: true
+        })
+      }
+      
+      get().startGame()
+      return true
+    } catch (e) {
+      console.error("Error rejoining room:", e)
+      localStorage.removeItem('scalada_active_room')
+      set({ hasSavedRoom: false })
+      return false
+    }
+  },
+
   startMatchmaking: async () => {
     const user = get().user
     if (!user) return
@@ -174,6 +258,7 @@ const useGameStore = create((set, get) => ({
             multiplayer: true
           })
           
+          get().saveActiveRoomToLocalStorage(activeRoomDetails)
           get().startGame()
         }
       })
@@ -319,6 +404,7 @@ const useGameStore = create((set, get) => ({
             multiplayerMode: 'online',
             multiplayer: true
           })
+          get().saveActiveRoomToLocalStorage(payload.new)
           supabase.removeChannel(roomSub)
           get().startGame()
         }
@@ -333,6 +419,7 @@ const useGameStore = create((set, get) => ({
             multiplayerMode: 'online',
             multiplayer: true
           })
+          get().saveActiveRoomToLocalStorage(latestRoom)
           supabase.removeChannel(roomSub)
           get().startGame()
         }
@@ -396,6 +483,8 @@ const useGameStore = create((set, get) => ({
       multiplayer: true
     })
     
+    get().saveActiveRoomToLocalStorage(updatedRoom)
+    
     // Broadcast de entrada inmediata al anfitrión en el canal de espera
     const joinChannel = supabase.channel(`room_wait_${upperId}`)
     joinChannel.subscribe(async (status) => {
@@ -417,13 +506,15 @@ const useGameStore = create((set, get) => ({
     const user = get().user
     const room = get().activeRoom
     
+    localStorage.removeItem('scalada_active_room')
     set({
       multiplayerMode: 'none',
       multiplayer: false,
       activeRoom: null,
       isHost: false,
       matchmakingStatus: 'idle',
-      remotePlayerState: null
+      remotePlayerState: null,
+      hasSavedRoom: false
     })
     isProcessingMatch = false
     
@@ -494,18 +585,29 @@ const useGameStore = create((set, get) => ({
           })
         }
       })
-      .on('presence', { event: 'leave', key: '*' }, ({ leftPresences }) => {
+      .on('presence', { event: 'sync' }, () => {
+        const state = roomChannel.presenceState()
         const otherUserId = activeRoom.host_id === user.id ? activeRoom.player_2_id : activeRoom.host_id
-        if (otherUserId && leftPresences.some(p => p.userId === otherUserId)) {
-          get().handleOnlineDisconnect("El otro jugador abandonó la partida.")
+        
+        let otherStatus = 'AFK'
+        if (otherUserId && state[otherUserId]) {
+          const tracks = state[otherUserId]
+          if (tracks && tracks.length > 0) {
+            otherStatus = tracks[0].status || 'ACTIVE'
+          }
         }
+        
+        set({
+          playerStatus: otherStatus
+        })
       })
 
     roomChannel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await roomChannel.track({
           userId: user.id,
-          online_at: new Date().toISOString()
+          online_at: new Date().toISOString(),
+          status: 'ACTIVE'
         })
         set({ lastPacketTimestamp: Date.now() })
       }
@@ -547,6 +649,7 @@ const useGameStore = create((set, get) => ({
   },
 
   checkSession: async () => {
+    get().checkSavedRoom()
     if (!isSupabaseConfigured) return
     set({ authLoading: true })
     try {
@@ -663,11 +766,13 @@ const useGameStore = create((set, get) => ({
     set({ authLoading: true })
     try {
       await supabase.auth.signOut()
+      localStorage.removeItem('scalada_active_room')
       set({ 
         user: null, 
         profile: null, 
         history: [], 
-        highScore: 0
+        highScore: 0,
+        hasSavedRoom: false
       })
     } catch (e) {
       console.error('Logout error:', e)

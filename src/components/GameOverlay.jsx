@@ -32,6 +32,8 @@ export default function GameOverlay() {
   const leaveRoom            = useGameStore(s => s.leaveRoom)
   const activeRoom           = useGameStore(s => s.activeRoom)
   const isHost               = useGameStore(s => s.isHost)
+  const hasSavedRoom         = useGameStore(s => s.hasSavedRoom)
+  const rejoinActiveRoom     = useGameStore(s => s.rejoinActiveRoom)
 
   // Supabase integrations
   const user                  = useGameStore(s => s.user)
@@ -252,6 +254,27 @@ export default function GameOverlay() {
                     <div className="online-actions-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', alignItems: 'center', padding: '10px 0' }}>
                       {matchmakingStatus === 'idle' && (
                         <>
+                          {hasSavedRoom && (
+                            <button 
+                              className="btn-play btn-success online-btn"
+                              style={{ 
+                                width: '100%', 
+                                maxWidth: '280px', 
+                                padding: '12px', 
+                                fontSize: '13px',
+                                background: 'linear-gradient(135deg, #00ff87 0%, #60efff 100%)',
+                                border: 'none',
+                                color: '#050814',
+                                fontWeight: 'bold',
+                                marginBottom: '10px',
+                                boxShadow: '0 0 15px rgba(0, 255, 135, 0.4)'
+                              }}
+                              onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); rejoinActiveRoom(); }}
+                            >
+                              🔄 RECONECTAR A PARTIDA ANTERIOR
+                            </button>
+                          )}
+
                           <button 
                             className="btn-play online-btn"
                             style={{ width: '100%', maxWidth: '280px', padding: '12px', fontSize: '13px' }}

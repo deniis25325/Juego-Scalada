@@ -1,9 +1,13 @@
 import useGameStore from '../store/useGameStore'
+import audioSystem from '../utils/audioSystem'
 
 export default function HUD() {
   const score  = useGameStore(s => s.score)
   const height = useGameStore(s => s.height)
   const phase  = useGameStore(s => s.phase)
+  const togglePause = useGameStore(s => s.togglePause)
+  const playerStatus = useGameStore(s => s.playerStatus)
+  const multiplayerMode = useGameStore(s => s.multiplayerMode)
 
   if (phase !== 'playing') return null
 
@@ -22,6 +26,22 @@ export default function HUD() {
           <span className="hud-value hud-score">{score}</span>
         </div>
       </div>
+
+      {/* AFK Status Badge in Multiplayer */}
+      {multiplayerMode === 'online' && playerStatus === 'AFK' && (
+        <div className="afk-badge">
+          ⚠️ COMPAÑERO DESCONECTADO / AFK
+        </div>
+      )}
+
+      {/* pause trigger button */}
+      <button 
+        className="btn-pause-trigger" 
+        onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); togglePause(); }}
+        title="Pausar juego / Salir"
+      >
+        ⏸️
+      </button>
 
       <div className="controls-hint">
         <span>WASD · Mover</span>

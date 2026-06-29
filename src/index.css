@@ -1692,5 +1692,100 @@ html, body, #root {
   }
 }
 
+/* ─── Pause Button ─── */
+.btn-pause-trigger {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(5, 8, 20, 0.6);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  color: #fff;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 200;
+  backdrop-filter: blur(12px);
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    0 0 10px rgba(0, 212, 255, 0.1);
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.btn-pause-trigger:hover {
+  background: rgba(0, 212, 255, 0.18);
+  border-color: rgba(0, 212, 255, 0.6);
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    0 0 15px rgba(0, 212, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.btn-pause-trigger:active {
+  transform: translateY(1px);
+}
+
+/* ─── AFK Status Badge ─── */
+.afk-badge {
+  position: fixed;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 6px 16px;
+  background: rgba(255, 51, 102, 0.15);
+  border: 1px solid rgba(255, 51, 102, 0.4);
+  border-radius: 20px;
+  color: #ff3366;
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  backdrop-filter: blur(8px);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 10px rgba(255, 51, 102, 0.2);
+  animation: afk-pulse 2s infinite ease-in-out;
+}
+
+@keyframes afk-pulse {
+  0% {
+    opacity: 0.85;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 10px rgba(255, 51, 102, 0.2);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 18px rgba(255, 51, 102, 0.5);
+    border-color: rgba(255, 51, 102, 0.7);
+  }
+  100% {
+    opacity: 0.85;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 10px rgba(255, 51, 102, 0.2);
+  }
+}
+
+/* Media query adjustments for smaller screens */
+@media (max-width: 768px) {
+  .btn-pause-trigger {
+    top: 15px;
+    right: 15px;
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
+  .afk-badge {
+    top: 85px;
+    font-size: 8px;
+    padding: 4px 12px;
+  }
+}
+
+
 
 

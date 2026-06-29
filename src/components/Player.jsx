@@ -169,14 +169,16 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
     // Mobile inputs read directly from Zustand state to prevent rerenders
     const storeState = useGameStore.getState()
-    const joystickX = playerId === 1 ? storeState.joystickX : 0
-    const joystickY = playerId === 1 ? storeState.joystickY : 0
-    const touchJump = playerId === 1 ? storeState.touchJump : false
+    const isLocalControl = multiplayerMode === 'online' ? !isRemote : (playerId === 1)
+
+    const joystickX = isLocalControl ? storeState.joystickX : 0
+    const joystickY = isLocalControl ? storeState.joystickY : 0
+    const touchJump = isLocalControl ? storeState.touchJump : false
 
     const jump = kJump || touchJump
 
     // Consumir el estado de salto táctil de inmediato para evitar que se quede pegado si se pierde el evento pointerup
-    if (touchJump && playerId === 1) {
+    if (touchJump && isLocalControl) {
       useGameStore.setState({ touchJump: false })
     }
 
@@ -330,14 +332,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
       return // Finalizar procesamiento del frame para jugador remoto
     }
 
-    // ── Timeout connection check ───────────────────────────────────────
-    if (multiplayerMode === 'online' && !isRemote) {
-      const lastTs = useGameStore.getState().lastPacketTimestamp
-      const isOnlineActive = useGameStore.getState().activeRoom?.status === 'ready'
-      if (isOnlineActive && lastTs > 0 && Date.now() - lastTs > 5000) {
-        useGameStore.getState().handleOnlineDisconnect("Se perdió la conexión con el otro jugador (Timeout de 5 segundos).")
-      }
-    }
+
 
     // Save positions to window for coop coordinate checks
     if (playerId === 1) {
