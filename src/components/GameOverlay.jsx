@@ -456,7 +456,15 @@ export default function GameOverlay() {
 
                 <button 
                   className="btn-play btn-danger" 
-                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); exitToMenu(); }}
+                  onClick={(e) => { 
+                    e.currentTarget.blur(); 
+                    audioSystem.playSFX('ui'); 
+                    if (multiplayerMode === 'online') {
+                      leaveRoom();
+                    } else {
+                      exitToMenu(); 
+                    }
+                  }}
                 >
                   🚪&nbsp;&nbsp;SALIR AL MENÚ PRINCIPAL
                 </button>

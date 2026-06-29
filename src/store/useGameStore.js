@@ -85,9 +85,71 @@ const useGameStore = create((set, get) => ({
     }
   },
 
-  restart: () => set((state) => ({ phase: 'playing', score: 0, height: 0, checkpointPos: [0, -0.25, 0], levelVersion: state.levelVersion + 1, saveScoreStatus: 'idle', reviveCount: 0 })),
+  restart: () => {
+    set((state) => ({ 
+      phase: 'playing', 
+      score: 0, 
+      height: 0, 
+      checkpointPos: [0, -0.25, 0], 
+      levelVersion: state.levelVersion + 1, 
+      saveScoreStatus: 'idle', 
+      reviveCount: 0 
+    }))
+    if (get().multiplayerMode === 'online') {
+      get().broadcastRestart()
+    }
+  },
 
-  continueGame: () => set((state) => ({ phase: 'playing', reviveCount: state.reviveCount + 1, saveScoreStatus: 'idle' })),
+  restartLocally: () => {
+    set((state) => ({ 
+      phase: 'playing', 
+      score: 0, 
+      height: 0, 
+      checkpointPos: [0, -0.25, 0], 
+      levelVersion: state.levelVersion + 1, 
+      saveScoreStatus: 'idle', 
+      reviveCount: 0 
+    }))
+  },
+
+  broadcastRestart: () => {
+    if (window.roomGameChannel && isSupabaseConfigured) {
+      window.roomGameChannel.send({
+        type: 'broadcast',
+        event: 'game_restart',
+        payload: {}
+      })
+    }
+  },
+
+  continueGame: () => {
+    set((state) => ({ 
+      phase: 'playing', 
+      reviveCount: state.reviveCount + 1, 
+      saveScoreStatus: 'idle' 
+    }))
+    if (get().multiplayerMode === 'online') {
+      get().broadcastRevive()
+    }
+  },
+
+  continueGameLocally: () => {
+    set((state) => ({ 
+      phase: 'playing', 
+      reviveCount: state.reviveCount + 1, 
+      saveScoreStatus: 'idle' 
+    }))
+  },
+
+  broadcastRevive: () => {
+    if (window.roomGameChannel && isSupabaseConfigured) {
+      window.roomGameChannel.send({
+        type: 'broadcast',
+        event: 'game_revive',
+        payload: {}
+      })
+    }
+  },
 
   setHeight: (h) => {
     const rounded = Math.max(0, Math.floor(h))
@@ -607,10 +669,26 @@ const useGameStore = create((set, get) => ({
             remotePlayerState: payload,
             lastPacketTimestamp: Date.now()
           })
+          
+          // Sincronizar altura y puntaje directamente desde el payload remoto
+          if (payload.height !== undefined && payload.score !== undefined) {
+            const localHeight = get().height
+            const localScore = get().score
+            set({
+              height: Math.max(localHeight, payload.height),
+              score: Math.max(localScore, payload.score)
+            })
+          }
         }
       })
       .on('broadcast', { event: 'game_over' }, () => {
         get().gameOverLocally()
+      })
+      .on('broadcast', { event: 'game_restart' }, () => {
+        get().restartLocally()
+      })
+      .on('broadcast', { event: 'game_revive' }, () => {
+        get().continueGameLocally()
       })
       .on('presence', { event: 'sync' }, () => {
         const state = roomChannel.presenceState()

@@ -827,7 +827,9 @@ export default function Player({ playerId = 1, playerPosRef }) {
           hasInput,
           moveDir: { x: _moveDir.x, y: _moveDir.y, z: _moveDir.z },
           isGrounded: isGrounded.current,
-          isRespawning: isRespawning.current
+          isRespawning: isRespawning.current,
+          height: useGameStore.getState().height,
+          score: useGameStore.getState().score
         })
       }
     }
