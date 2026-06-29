@@ -799,9 +799,15 @@ export default function Player({ playerId = 1, playerPosRef }) {
       playerPosRef.current.z = translation.z
     }
 
-    // Only Player 1 drives height score tracking
-    if (playerId === 1) {
-      setHeight(translation.y - 0.6)
+    // Drive height score tracking based on the highest player in coop, otherwise player 1
+    if (multiplayer) {
+      const p1Height = window.player1Pos ? (window.player1Pos.y - 0.6) : 0
+      const p2Height = window.player2Pos ? (window.player2Pos.y - 0.6) : 0
+      setHeight(Math.max(p1Height, p2Height))
+    } else {
+      if (playerId === 1) {
+        setHeight(translation.y - 0.6)
+      }
     }
 
     // ── Grounded Position Tracking (For ad-continues) ─────────────────
