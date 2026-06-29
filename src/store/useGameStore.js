@@ -39,12 +39,20 @@ const useGameStore = create((set, get) => ({
   lastPacketTimestamp: 0,
   hasSavedRoom: false,
   playerStatus: 'ACTIVE', // 'ACTIVE' | 'AFK'
+  p1Score: 0,
+  p1Height: 0,
+  p2Score: 0,
+  p2Height: 0,
 
   startGame: () => {
     set((state) => ({ 
       phase: 'playing', 
       score: 0, 
       height: 0, 
+      p1Score: 0,
+      p1Height: 0,
+      p2Score: 0,
+      p2Height: 0,
       checkpointPos: [0, -0.25, 0], 
       levelVersion: state.levelVersion + 1, 
       saveScoreStatus: 'idle', 
@@ -155,9 +163,40 @@ const useGameStore = create((set, get) => ({
     const rounded = Math.max(0, Math.floor(h))
     set((state) => ({
       height: rounded,
-      // score = highest point ever reached in this run
       score: Math.max(state.score, rounded),
     }))
+  },
+
+  setPlayer1Height: (h) => {
+    const rounded = Math.max(0, Math.floor(h))
+    set((state) => {
+      const newP1Height = rounded
+      const newP1Score = Math.max(state.p1Score, rounded)
+      const maxH = Math.max(newP1Height, state.p2Height)
+      const maxS = Math.max(newP1Score, state.p2Score)
+      return {
+        p1Height: newP1Height,
+        p1Score: newP1Score,
+        height: maxH,
+        score: Math.max(state.score, maxS)
+      }
+    })
+  },
+
+  setPlayer2Height: (h) => {
+    const rounded = Math.max(0, Math.floor(h))
+    set((state) => {
+      const newP2Height = rounded
+      const newP2Score = Math.max(state.p2Score, rounded)
+      const maxH = Math.max(state.p1Height, newP2Height)
+      const maxS = Math.max(state.p1Score, newP2Score)
+      return {
+        p2Height: newP2Height,
+        p2Score: newP2Score,
+        height: maxH,
+        score: Math.max(state.score, maxS)
+      }
+    })
   },
 
   setMultiplayerMode: (mode) => set({ 
@@ -177,6 +216,10 @@ const useGameStore = create((set, get) => ({
     phase: 'ready', 
     score: 0, 
     height: 0, 
+    p1Score: 0,
+    p1Height: 0,
+    p2Score: 0,
+    p2Height: 0,
     checkpointPos: [0, -0.25, 0], 
     saveScoreStatus: 'idle',
     multiplayerMode: 'none',
@@ -672,12 +715,29 @@ const useGameStore = create((set, get) => ({
           
           // Sincronizar altura y puntaje directamente desde el payload remoto
           if (payload.height !== undefined && payload.score !== undefined) {
-            const localHeight = get().height
-            const localScore = get().score
-            set({
-              height: Math.max(localHeight, payload.height),
-              score: Math.max(localScore, payload.score)
-            })
+            if (get().isHost) {
+              set((state) => {
+                const maxH = Math.max(state.p1Height, payload.height)
+                const maxS = Math.max(state.p1Score, payload.score)
+                return {
+                  p2Height: payload.height,
+                  p2Score: payload.score,
+                  height: maxH,
+                  score: Math.max(state.score, maxS)
+                }
+              })
+            } else {
+              set((state) => {
+                const maxH = Math.max(payload.height, state.p2Height)
+                const maxS = Math.max(payload.score, state.p2Score)
+                return {
+                  p1Height: payload.height,
+                  p1Score: payload.score,
+                  height: maxH,
+                  score: Math.max(state.score, maxS)
+                }
+              })
+            }
           }
         }
       })

@@ -73,6 +73,8 @@ export default function Player({ playerId = 1, playerPosRef }) {
   const isTransitioning = useGameStore(s => s.isTransitioning)
   const gameOver        = useGameStore(s => s.gameOver)
   const setHeight       = useGameStore(s => s.setHeight)
+  const setPlayer1Height = useGameStore(s => s.setPlayer1Height)
+  const setPlayer2Height = useGameStore(s => s.setPlayer2Height)
   const levelVersion    = useGameStore(s => s.levelVersion)
   const reviveCount     = useGameStore(s => s.reviveCount)
 
@@ -149,6 +151,26 @@ export default function Player({ playerId = 1, playerPosRef }) {
       } else {
         window.player2Pos = { ...respawnTargetRef.current }
       }
+
+      // Broadcast state during respawning so other player knows we are respawning!
+      if (multiplayerMode === 'online' && !isRemote) {
+        lastBroadcastRef.current += delta
+        if (lastBroadcastRef.current >= 0.08) {
+          lastBroadcastRef.current = 0
+          useGameStore.getState().broadcastLocalState({
+            userId: useGameStore.getState().user?.id,
+            position: { x: respawnTargetRef.current.x, y: respawnTargetRef.current.y, z: respawnTargetRef.current.z },
+            velocity: { x: 0, y: 0, z: 0 },
+            hasInput: false,
+            moveDir: { x: 0, y: 0, z: 0 },
+            isGrounded: false,
+            isRespawning: true,
+            height: useGameStore.getState().height,
+            score: useGameStore.getState().score
+          })
+        }
+      }
+
       return
     }
 
@@ -799,11 +821,21 @@ export default function Player({ playerId = 1, playerPosRef }) {
       playerPosRef.current.z = translation.z
     }
 
-    // Drive height score tracking based on the highest player in coop, otherwise player 1
-    if (multiplayer) {
-      const p1Height = window.player1Pos ? (window.player1Pos.y - 0.6) : 0
-      const p2Height = window.player2Pos ? (window.player2Pos.y - 0.6) : 0
-      setHeight(Math.max(p1Height, p2Height))
+    // Update player-specific heights in the store
+    if (multiplayerMode === 'online') {
+      if (!isRemote) {
+        if (playerId === 1) {
+          setPlayer1Height(translation.y - 0.6)
+        } else {
+          setPlayer2Height(translation.y - 0.6)
+        }
+      }
+    } else if (multiplayerMode === 'local') {
+      if (playerId === 1) {
+        setPlayer1Height(translation.y - 0.6)
+      } else {
+        setPlayer2Height(translation.y - 0.6)
+      }
     } else {
       if (playerId === 1) {
         setHeight(translation.y - 0.6)
