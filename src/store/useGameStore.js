@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { supabase, isSupabaseConfigured } from '../utils/supabaseClient'
 
+let isProcessingMatch = false
+
 const useGameStore = create((set, get) => ({
   phase: 'ready',   // 'ready' | 'playing' | 'paused' | 'dead'
   score: 0,         // current score (= max height in meters)
@@ -109,14 +111,13 @@ const useGameStore = create((set, get) => ({
     if (!user) return
     
     set({ matchmakingStatus: 'searching' })
+    isProcessingMatch = false
     
-    // 1. Limpiar colas antiguas de este usuario
-    if (isSupabaseConfigured) {
-      try {
-        await supabase.from('matchmaking_queue').delete().eq('player_id', user.id)
-      } catch (e) {
-        console.error(e)
+    if (window.matchmakingChannel) {
+      if (isSupabaseConfigured) {
+        supabase.removeChannel(window.matchmakingChannel)
       }
+      window.matchmakingChannel = null
     }
     
     if (!isSupabaseConfigured) {
@@ -128,78 +129,127 @@ const useGameStore = create((set, get) => ({
       return
     }
     
-    // 2. Insertar en la cola
-    const { data: queueRow, error: queueErr } = await supabase
-      .from('matchmaking_queue')
-      .insert({ player_id: user.id, status: 'searching' })
-      .select()
-      .single()
-      
-    if (queueErr) {
-      console.error(queueErr)
-      set({ matchmakingStatus: 'idle' })
-      return
-    }
+    // Crear canal de presencia y broadcast global para matchmaking
+    const lobbyChannel = supabase.channel('global_matchmaking', {
+      config: {
+        presence: {
+          key: user.id
+        },
+        broadcast: {
+          self: true
+        }
+      }
+    })
     
-    // 3. Suscribirse a cambios en su fila
-    const matchmakingSubscription = supabase
-      .channel(`match_${user.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'matchmaking_queue',
-        filter: `player_id=eq.${user.id}`
-      }, async (payload) => {
-        if (payload.new.status === 'matched') {
-          const roomId = payload.new.room_id
-          const { data: room } = await supabase.from('rooms').select().eq('id', roomId).single()
-          if (room) {
-            set({
-              activeRoom: room,
-              isHost: room.host_id === user.id,
-              matchmakingStatus: 'playing',
-              multiplayerMode: 'online',
-              multiplayer: true
-            })
-            await supabase.from('matchmaking_queue').delete().eq('player_id', user.id)
-            get().startGame()
+    lobbyChannel
+      .on('presence', { event: 'sync' }, () => {
+        const presences = lobbyChannel.presenceState()
+        get().handlePresenceSync(presences)
+      })
+      .on('broadcast', { event: 'match_created' }, async ({ payload }) => {
+        const currentUser = get().user
+        if (!currentUser) return
+        
+        if (payload.hostId === currentUser.id || payload.player2Id === currentUser.id) {
+          // Nos hemos emparejado, limpiar canal de matchmaking
+          if (window.matchmakingChannel) {
+            supabase.removeChannel(window.matchmakingChannel)
+            window.matchmakingChannel = null
           }
+          
+          const activeRoomDetails = {
+            id: payload.roomId,
+            host_id: payload.hostId,
+            player_2_id: payload.player2Id,
+            status: 'ready',
+            map_seed: payload.mapSeed,
+            player_count: 2
+          }
+          
+          set({
+            activeRoom: activeRoomDetails,
+            isHost: payload.hostId === currentUser.id,
+            matchmakingStatus: 'playing',
+            multiplayerMode: 'online',
+            multiplayer: true
+          })
+          
+          get().startGame()
         }
       })
-      .subscribe()
       
-    window.matchmakingSubscription = matchmakingSubscription
-    
-    // 4. Buscar a otro jugador en espera
-    const { data: searchList } = await supabase
-      .from('matchmaking_queue')
-      .select()
-      .eq('status', 'searching')
-      .neq('player_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      
-    if (searchList && searchList.length > 0) {
-      const opponent = searchList[0]
-      const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
-      const seed = Math.floor(Math.random() * 1000000)
-      
-      const { data: room, error: roomErr } = await supabase
-        .from('rooms')
-        .insert({
-          id: roomId,
-          host_id: opponent.player_id,
-          player_2_id: user.id,
-          status: 'ready',
-          map_seed: seed,
-          player_count: 2
+    lobbyChannel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await lobbyChannel.track({
+          userId: user.id,
+          username: get().profile?.username || user.email?.split('@')[0] || 'Escalador',
+          status: 'searching',
+          joinedAt: new Date().toISOString()
         })
-        .select()
-        .single()
+      }
+    })
+    
+    window.matchmakingChannel = lobbyChannel
+  },
+
+  handlePresenceSync: async (presences) => {
+    const user = get().user
+    if (!user) return
+    
+    // Obtener todos los escaladores en línea buscando partida
+    const searchingPlayers = []
+    Object.keys(presences).forEach((key) => {
+      const tracks = presences[key]
+      if (tracks && tracks.length > 0) {
+        const p = tracks[0]
+        if (p.status === 'searching' && p.userId !== user.id) {
+          searchingPlayers.push(p)
+        }
+      }
+    })
+    
+    if (searchingPlayers.length > 0) {
+      // Ordenar por el que lleva más tiempo esperando (joinedAt más antiguo)
+      searchingPlayers.sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt))
+      const opponent = searchingPlayers[0]
+      
+      // Decidir el iniciador de forma determinista para evitar duplicados (el de ID menor)
+      const isInitiator = user.id < opponent.userId
+      
+      if (isInitiator) {
+        if (isProcessingMatch) return
+        isProcessingMatch = true
         
-      if (!roomErr && room) {
-        await supabase.from('matchmaking_queue').update({ status: 'matched', room_id: roomId }).eq('player_id', opponent.player_id)
-        await supabase.from('matchmaking_queue').update({ status: 'matched', room_id: roomId }).eq('player_id', user.id)
+        const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
+        const seed = Math.floor(Math.random() * 1000000)
+        
+        // Crear registro de sala en la base de datos de fondo
+        if (isSupabaseConfigured) {
+          supabase.from('rooms').insert({
+            id: roomId,
+            host_id: user.id,
+            player_2_id: opponent.userId,
+            status: 'ready',
+            map_seed: seed,
+            player_count: 2
+          }).then(({ error }) => {
+            if (error) console.error("Error creating database room record:", error)
+          })
+        }
+        
+        // Enviar broadcast de emparejamiento inmediato
+        if (window.matchmakingChannel) {
+          await window.matchmakingChannel.send({
+            type: 'broadcast',
+            event: 'match_created',
+            payload: {
+              hostId: user.id,
+              player2Id: opponent.userId,
+              roomId,
+              mapSeed: seed
+            }
+          })
+        }
       }
     }
   },
@@ -207,18 +257,13 @@ const useGameStore = create((set, get) => ({
   cancelMatchmaking: async () => {
     const user = get().user
     set({ matchmakingStatus: 'idle' })
+    isProcessingMatch = false
     
-    if (window.matchmakingSubscription) {
+    if (window.matchmakingChannel) {
       if (isSupabaseConfigured) {
-        supabase.removeChannel(window.matchmakingSubscription)
+        supabase.removeChannel(window.matchmakingChannel)
       }
-      window.matchmakingSubscription = null
-    }
-    
-    if (user && isSupabaseConfigured) {
-      try {
-        await supabase.from('matchmaking_queue').delete().eq('player_id', user.id)
-      } catch (e) {}
+      window.matchmakingChannel = null
     }
   },
   
@@ -270,6 +315,20 @@ const useGameStore = create((set, get) => ({
         if (payload.new.status === 'ready' && payload.new.player_2_id) {
           set({
             activeRoom: payload.new,
+            matchmakingStatus: 'playing',
+            multiplayerMode: 'online',
+            multiplayer: true
+          })
+          supabase.removeChannel(roomSub)
+          get().startGame()
+        }
+      })
+      .on('broadcast', { event: 'player_joined' }, async () => {
+        // Fallback rápido si no llega postgres_changes por limitaciones de Realtime en DB
+        const { data: latestRoom } = await supabase.from('rooms').select().eq('id', roomId).single()
+        if (latestRoom && latestRoom.status === 'ready' && latestRoom.player_2_id) {
+          set({
+            activeRoom: latestRoom,
             matchmakingStatus: 'playing',
             multiplayerMode: 'online',
             multiplayer: true
@@ -337,6 +396,19 @@ const useGameStore = create((set, get) => ({
       multiplayer: true
     })
     
+    // Broadcast de entrada inmediata al anfitrión en el canal de espera
+    const joinChannel = supabase.channel(`room_wait_${upperId}`)
+    joinChannel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await joinChannel.send({
+          type: 'broadcast',
+          event: 'player_joined',
+          payload: { userId: user.id }
+        })
+        supabase.removeChannel(joinChannel)
+      }
+    })
+    
     get().startGame()
     return true
   },
@@ -353,10 +425,11 @@ const useGameStore = create((set, get) => ({
       matchmakingStatus: 'idle',
       remotePlayerState: null
     })
+    isProcessingMatch = false
     
-    if (window.matchmakingSubscription) {
-      if (isSupabaseConfigured) supabase.removeChannel(window.matchmakingSubscription)
-      window.matchmakingSubscription = null
+    if (window.matchmakingChannel) {
+      if (isSupabaseConfigured) supabase.removeChannel(window.matchmakingChannel)
+      window.matchmakingChannel = null
     }
     if (window.privateRoomSubscription) {
       if (isSupabaseConfigured) supabase.removeChannel(window.privateRoomSubscription)
@@ -372,10 +445,6 @@ const useGameStore = create((set, get) => ({
     }
     
     if (user && isSupabaseConfigured) {
-      try {
-        await supabase.from('matchmaking_queue').delete().eq('player_id', user.id)
-      } catch (e) {}
-      
       if (room) {
         try {
           if (room.host_id === user.id) {
