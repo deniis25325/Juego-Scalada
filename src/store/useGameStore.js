@@ -54,10 +54,34 @@ const useGameStore = create((set, get) => ({
   },
 
   gameOver: () => {
+    const { score, highScore, user, saveScoreToSupabase, multiplayerMode } = get()
+    set({ phase: 'dead', highScore: Math.max(score, highScore) })
+    if (user) {
+      saveScoreToSupabase(score)
+    }
+    
+    // Si estamos en modo online, notificar al otro jugador de que la partida terminó
+    if (multiplayerMode === 'online') {
+      get().broadcastGameOver()
+    }
+  },
+
+  gameOverLocally: () => {
+    if (get().phase === 'dead') return // Evitar bucles infinitos
     const { score, highScore, user, saveScoreToSupabase } = get()
     set({ phase: 'dead', highScore: Math.max(score, highScore) })
     if (user) {
       saveScoreToSupabase(score)
+    }
+  },
+
+  broadcastGameOver: () => {
+    if (window.roomGameChannel && isSupabaseConfigured) {
+      window.roomGameChannel.send({
+        type: 'broadcast',
+        event: 'game_over',
+        payload: {}
+      })
     }
   },
 
@@ -584,6 +608,9 @@ const useGameStore = create((set, get) => ({
             lastPacketTimestamp: Date.now()
           })
         }
+      })
+      .on('broadcast', { event: 'game_over' }, () => {
+        get().gameOverLocally()
       })
       .on('presence', { event: 'sync' }, () => {
         const state = roomChannel.presenceState()
