@@ -328,6 +328,16 @@ export default function Player({ playerId = 1, playerPosRef }) {
           playerPosRef.current.y = translation.y
           playerPosRef.current.z = translation.z
         }
+
+        // Save positions to window for coop coordinate checks (even for remote players)
+        const finalTranslation = rbRef.current.translation()
+        if (playerId === 1) {
+          window.player1Pos = { x: finalTranslation.x, y: finalTranslation.y, z: finalTranslation.z }
+          window.player1Respawning = remoteState.isRespawning
+        } else {
+          window.player2Pos = { x: finalTranslation.x, y: finalTranslation.y, z: finalTranslation.z }
+          window.player2Respawning = remoteState.isRespawning
+        }
       }
       return // Finalizar procesamiento del frame para jugador remoto
     }
