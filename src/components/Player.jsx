@@ -506,22 +506,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
       }
     }
 
-    // ── Broadcast state throttled (12 updates/sec) ─────────────────────
-    if (multiplayerMode === 'online' && !isRemote) {
-      lastBroadcastRef.current += delta
-      if (lastBroadcastRef.current >= 0.08) {
-        lastBroadcastRef.current = 0
-        useGameStore.getState().broadcastLocalState({
-          userId: useGameStore.getState().user?.id,
-          position: { x: translation.x, y: translation.y, z: translation.z },
-          velocity: { x: linvel.x, y: linvel.y, z: linvel.z },
-          hasInput,
-          moveDir: { x: _moveDir.x, y: _moveDir.y, z: _moveDir.z },
-          isGrounded: isGrounded.current,
-          isRespawning: isRespawning.current
-        })
-      }
-    }
+
 
     // ── Coyote time ────────────────────────────────────────────────────
     if (isGrounded.current) {
@@ -817,6 +802,23 @@ export default function Player({ playerId = 1, playerPosRef }) {
     // ── Grounded Position Tracking (For ad-continues) ─────────────────
     if (isGrounded.current && translation.y > -0.2 && !isRespawning.current) {
       useGameStore.setState({ checkpointPos: [translation.x, translation.y, translation.z] })
+    }
+
+    // ── Broadcast state throttled (12 updates/sec) ─────────────────────
+    if (multiplayerMode === 'online' && !isRemote) {
+      lastBroadcastRef.current += delta
+      if (lastBroadcastRef.current >= 0.08) {
+        lastBroadcastRef.current = 0
+        useGameStore.getState().broadcastLocalState({
+          userId: useGameStore.getState().user?.id,
+          position: { x: translation.x, y: translation.y, z: translation.z },
+          velocity: { x: vx, y: vy, z: vz },
+          hasInput,
+          moveDir: { x: _moveDir.x, y: _moveDir.y, z: _moveDir.z },
+          isGrounded: isGrounded.current,
+          isRespawning: isRespawning.current
+        })
+      }
     }
   })
 
