@@ -12,6 +12,10 @@ import TetherLine from './components/TetherLine'
 import HUD from './components/HUD'
 import GameOverlay from './components/GameOverlay'
 import HeightMilestone from './components/HeightMilestone'
+import AuthModal from './components/AuthModal'
+import LeaderboardModal from './components/LeaderboardModal'
+import VirtualJoystick from './components/VirtualJoystick'
+import JumpButton from './components/JumpButton'
 import useGameStore from './store/useGameStore'
 import audioSystem from './utils/audioSystem'
 
@@ -277,6 +281,12 @@ export default function App() {
 
   const phase = useGameStore(s => s.phase)
   const togglePause = useGameStore(s => s.togglePause)
+  const checkSession = useGameStore(s => s.checkSession)
+
+  // ── Restaurar sesión al cargar el juego ─────────────────────────────
+  useEffect(() => {
+    checkSession()
+  }, [checkSession])
 
   // ── Keyboard Escape Pausing ─────────────────────────────────────────
   useEffect(() => {
@@ -320,6 +330,10 @@ export default function App() {
       <HUD />
       <HeightMilestone />
       <GameOverlay />
+      <AuthModal />
+      <LeaderboardModal />
+      <VirtualJoystick />
+      <JumpButton />
     </div>
   )
 }

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import useGameStore from '../store/useGameStore'
 import audioSystem from '../utils/audioSystem'
+import { isSupabaseConfigured } from '../utils/supabaseClient'
+import AdSimulationOverlay from './AdSimulationOverlay'
 
 /* ── Transition timing must match CSS .overlay--exit duration ─── */
 const EXIT_MS = 680
@@ -20,7 +22,16 @@ export default function GameOverlay() {
   const setMultiplayer  = useGameStore(s => s.setMultiplayer)
   const setScenario     = useGameStore(s => s.setScenario)
 
+  // Supabase integrations
+  const user                  = useGameStore(s => s.user)
+  const profile               = useGameStore(s => s.profile)
+  const setAuthModalOpen      = useGameStore(s => s.setAuthModalOpen)
+  const setLeaderboardModalOpen = useGameStore(s => s.setLeaderboardModalOpen)
+  const logout                = useGameStore(s => s.logout)
+  const saveScoreStatus       = useGameStore(s => s.saveScoreStatus)
+
   const [exiting, setExiting] = useState(false)
+  const [adOpen, setAdOpen] = useState(false)
 
   const handlePlay = (e) => {
     if (e && e.currentTarget) e.currentTarget.blur()
@@ -44,6 +55,28 @@ export default function GameOverlay() {
           {/* ── INITIAL SCREEN ────────────────────────────────────── */}
           {phase === 'ready' && (
             <div className="overlay-content" key="ready">
+
+              {/* Profile status top bar */}
+              <div className="profile-bar">
+                {isSupabaseConfigured ? (
+                  user ? (
+                    <div className="profile-logged">
+                      <span className="profile-user">👤 {profile?.username || user.email?.split('@')[0]}</span>
+                      <span className="profile-record">🏆 Récord: <strong>{profile?.max_altitude || 0} m</strong></span>
+                      <button className="btn-profile-action" onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); logout(); }}>Cerrar Sesión</button>
+                    </div>
+                  ) : (
+                    <div className="profile-logged-out">
+                      <button className="btn-profile-action btn-login" onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setAuthModalOpen(true); }}>🔑 Iniciar Sesión / Registro</button>
+                    </div>
+                  )
+                ) : (
+                  <div className="profile-offline">
+                    <span>⚠️ Modo Invitado (Sin Conexión)</span>
+                  </div>
+                )}
+                <button className="btn-leaderboard-open" onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setLeaderboardModalOpen(true); }}>🏆 Leaderboard</button>
+              </div>
 
               {/* Title block */}
               <div className="logo-wrap">
@@ -219,12 +252,43 @@ export default function GameOverlay() {
                 </div>
               </div>
 
-              <button 
-                className="btn-play" 
-                onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); restart(); }}
-              >
-                ↺&nbsp;&nbsp;REINTENTAR
-              </button>
+              {user && (
+                <div className="supabase-save-status">
+                  {saveScoreStatus === 'saving' && <span className="status-saving">💾 Guardando récord en la nube...</span>}
+                  {saveScoreStatus === 'saved' && <span className="status-saved">✅ ¡Sincronizado en la nube!</span>}
+                  {saveScoreStatus === 'error' && <span className="status-error">❌ Error al conectar con la nube</span>}
+                </div>
+              )}
+
+              <div className="game-over-buttons-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '280px' }}>
+                <button 
+                  className="btn-play btn-ad-continue" 
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setAdOpen(true); }}
+                >
+                  📺&nbsp;&nbsp;VER ANUNCIO PARA CONTINUAR
+                </button>
+
+                <button 
+                  className="btn-play btn-secondary" 
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); restart(); }}
+                >
+                  ↺&nbsp;&nbsp;REINTENTAR DESDE EL INICIO
+                </button>
+                
+                <button 
+                  className="btn-play btn-secondary" 
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setLeaderboardModalOpen(true); }}
+                >
+                  🏆&nbsp;&nbsp;VER RÉCORDS
+                </button>
+
+                <button 
+                  className="btn-play btn-danger" 
+                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); exitToMenu(); }}
+                >
+                  🚪&nbsp;&nbsp;SALIR AL MENÚ PRINCIPAL
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -232,6 +296,9 @@ export default function GameOverlay() {
 
       {/* Screen fade transition overlay */}
       <div className={`fade-screen ${isTransitioning ? 'fade-screen--active' : ''}`} />
+
+      {/* Ad Simulation Overlay */}
+      <AdSimulationOverlay isOpen={adOpen} onClose={() => setAdOpen(false)} />
     </>
   )
 }

@@ -78,11 +78,8 @@ function chooseStructureType(types) {
 export function generatePlatform(prevY, prevX, prevZ, height) {
   const diff = getDifficulty(height);
 
-  // Checkpoint height threshold check (~35 meters)
-  const checkpointInterval = 35;
-  const checkpointIndex = Math.floor((prevY + diff.gapMin) / checkpointInterval);
-  const lastCheckpointIndex = Math.floor(prevY / checkpointInterval);
-  const isCheckpoint = checkpointIndex > lastCheckpointIndex && checkpointIndex > 0;
+  // Checkpoint height threshold check (~35 meters) - Desactivado por requerimiento de anuncios
+  const isCheckpoint = false;
 
   const type = isCheckpoint ? 'checkpoint' : chooseStructureType(diff.types);
 

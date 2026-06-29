@@ -41,6 +41,7 @@ export default function Player({ playerId = 1, playerPosRef }) {
   const isRespawning   = useRef(false)
   const respawnTimeoutRef = useRef(null)
   const prevVersionRef = useRef(0)
+  const prevReviveRef  = useRef(0)
   const respawnTargetRef = useRef({ x: 0, y: -0.25 + 0.85, z: 0 })
 
   // Visual refs — physics body is NOT scaled/rotated
@@ -63,39 +64,47 @@ export default function Player({ playerId = 1, playerPosRef }) {
   const gameOver        = useGameStore(s => s.gameOver)
   const setHeight       = useGameStore(s => s.setHeight)
   const levelVersion    = useGameStore(s => s.levelVersion)
+  const reviveCount     = useGameStore(s => s.reviveCount)
 
-  // Reset physics on new game / retry
+  // Reset physics on new game / retry / revive
   useEffect(() => {
     if (phase === 'playing' && rbRef.current) {
-      // Only teleport players if the level version changed (real start or reset)
-      if (levelVersion !== prevVersionRef.current) {
-        const checkpointPos = useGameStore.getState().checkpointPos
-        const spawnX = playerId === 1 ? -1.2 : 1.2
+      const checkpointPos = useGameStore.getState().checkpointPos
+      const spawnX = playerId === 1 ? -1.2 : 1.2
 
-        // Reset respawn state
-        isRespawning.current = false
-        if (playerId === 1) {
-          window.player1Respawning = false
-        } else {
-          window.player2Respawning = false
-        }
-
-        // Spawn at checkpoint if active, else spawn at starting base
-        // Starting platform top surface = -0.5 + 0.25 = -0.25
-        // Checkpoint platform top surface = checkpointPos stored as platformCenter + platformHalfHeight
-        const hasCheckpoint = checkpointPos[1] > 3.0
-        const sx = hasCheckpoint ? checkpointPos[0] + (multiplayer ? spawnX : 0) : (multiplayer ? spawnX : 0)
-        const sy = hasCheckpoint ? checkpointPos[1] + SAFE_SPAWN_OFFSET : (-0.25 + SAFE_SPAWN_OFFSET)
-        const sz = hasCheckpoint ? checkpointPos[2] : 0
-
-        rbRef.current.setTranslation({ x: sx, y: sy, z: sz }, true)
-        rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
-        rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
-
-        prevVersionRef.current = levelVersion
+      // Reset respawn state
+      isRespawning.current = false
+      if (playerId === 1) {
+        window.player1Respawning = false
+      } else {
+        window.player2Respawning = false
       }
+
+      let sx, sy, sz
+      if (levelVersion !== prevVersionRef.current) {
+        // Normal start/restart: spawn at start base (which is at -0.25)
+        sx = multiplayer ? spawnX : 0
+        sy = -0.25 + SAFE_SPAWN_OFFSET
+        sz = 0
+        
+        prevVersionRef.current = levelVersion
+        prevReviveRef.current = reviveCount
+      } else if (reviveCount !== prevReviveRef.current) {
+        // Revive: spawn at the last safe grounded position!
+        sx = checkpointPos[0] + (multiplayer ? spawnX : 0)
+        sy = checkpointPos[1] + SAFE_SPAWN_OFFSET
+        sz = checkpointPos[2]
+        
+        prevReviveRef.current = reviveCount
+      } else {
+        return
+      }
+
+      rbRef.current.setTranslation({ x: sx, y: sy, z: sz }, true)
+      rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      rbRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true)
     }
-  }, [phase, levelVersion, multiplayer, playerId])
+  }, [phase, levelVersion, reviveCount, multiplayer, playerId])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -138,11 +147,19 @@ export default function Player({ playerId = 1, playerPosRef }) {
 
     // ── Player-specific input controls ───────────────────────────────
     const keys = getKeys()
-    const forward   = playerId === 1 ? keys.p1_forward   : keys.p2_forward
-    const backward  = playerId === 1 ? keys.p1_backward  : keys.p2_backward
-    const leftward  = playerId === 1 ? keys.p1_leftward  : keys.p2_leftward
-    const rightward = playerId === 1 ? keys.p1_rightward : keys.p2_rightward
-    const jump      = playerId === 1 ? keys.p1_jump      : keys.p2_jump
+    const kForward   = playerId === 1 ? keys.p1_forward   : keys.p2_forward
+    const kBackward  = playerId === 1 ? keys.p1_backward  : keys.p2_backward
+    const kLeftward  = playerId === 1 ? keys.p1_leftward  : keys.p2_leftward
+    const kRightward = playerId === 1 ? keys.p1_rightward : keys.p2_rightward
+    const kJump      = playerId === 1 ? keys.p1_jump      : keys.p2_jump
+
+    // Mobile inputs read directly from Zustand state to prevent rerenders
+    const storeState = useGameStore.getState()
+    const joystickX = playerId === 1 ? storeState.joystickX : 0
+    const joystickY = playerId === 1 ? storeState.joystickY : 0
+    const touchJump = playerId === 1 ? storeState.touchJump : false
+
+    const jump = kJump || touchJump
 
     const translation = rbRef.current.translation()
     const linvel      = rbRef.current.linvel()
@@ -228,15 +245,9 @@ export default function Player({ playerId = 1, playerPosRef }) {
         if (multiplayer && isCoopRespawn) {
           // No global transition screen cleanup needed
         } else {
-          // If we have an active checkpoint, respawn automatically without Game Over!
-          const checkpointPos = useGameStore.getState().checkpointPos
-          const hasCheckpoint = checkpointPos[1] > 3.0
-          if (hasCheckpoint) {
-            useGameStore.setState({ isTransitioning: false })
-          } else {
-            gameOver()
-            useGameStore.setState({ isTransitioning: false })
-          }
+          // Fall deaths ALWAYS trigger Game Over (since checkpoints are removed, ad needed to continue)
+          gameOver()
+          useGameStore.setState({ isTransitioning: false })
         }
       }, 600)
       return
@@ -256,20 +267,47 @@ export default function Player({ playerId = 1, playerPosRef }) {
     _right.crossVectors(_camDir, _up).normalize()
 
     _moveDir.set(0, 0, 0)
-    if (forward)   _moveDir.add(_camDir)
-    if (backward)  _moveDir.sub(_camDir)
-    if (rightward) _moveDir.add(_right)
-    if (leftward)  _moveDir.sub(_right)
+    
+    // Add keyboard inputs
+    if (kForward)   _moveDir.add(_camDir)
+    if (kBackward)  _moveDir.sub(_camDir)
+    if (kRightward) _moveDir.add(_right)
+    if (kLeftward)  _moveDir.sub(_right)
 
-    const hasInput = _moveDir.lengthSq() > 0.001
-    if (hasInput) _moveDir.normalize()
+    let hasInput = _moveDir.lengthSq() > 0.001
+    if (hasInput) {
+      _moveDir.normalize()
+    }
+
+    // Add joystick inputs if active
+    const joyLengthSq = joystickX * joystickX + joystickY * joystickY
+    const hasJoystickInput = joyLengthSq > 0.001
+    let currentSpeed = SPEED
+
+    if (hasJoystickInput) {
+      const joyVec = new Vector3()
+      joyVec.addScaledVector(_camDir, -joystickY)
+      joyVec.addScaledVector(_right, joystickX)
+      const joyLength = Math.min(1.0, Math.sqrt(joyLengthSq))
+
+      if (hasInput) {
+        _moveDir.add(joyVec)
+        if (_moveDir.lengthSq() > 0.001) _moveDir.normalize()
+      } else {
+        _moveDir.copy(joyVec)
+        if (_moveDir.lengthSq() > 0.001) _moveDir.normalize()
+      }
+
+      hasInput = true
+      currentSpeed = SPEED * joyLength
+    }
 
     // ── Horizontal velocity ─────────────────────────────────────────────
     let vx = hasInput
-      ? _moveDir.x * SPEED
+      ? _moveDir.x * currentSpeed
       : linvel.x * Math.max(0, 1 - DAMPING * delta)
     let vz = hasInput
-      ? _moveDir.z * SPEED
+      ? _moveDir.z * currentSpeed
       : linvel.z * Math.max(0, 1 - DAMPING * delta)
 
     let vy = linvel.y
@@ -480,6 +518,11 @@ export default function Player({ playerId = 1, playerPosRef }) {
     // Only Player 1 drives height score tracking
     if (playerId === 1) {
       setHeight(translation.y - 0.6)
+    }
+
+    // ── Grounded Position Tracking (For ad-continues) ─────────────────
+    if (isGrounded.current && translation.y > -0.2 && !isRespawning.current) {
+      useGameStore.setState({ checkpointPos: [translation.x, translation.y, translation.z] })
     }
   })
 
