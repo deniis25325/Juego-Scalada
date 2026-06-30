@@ -34,7 +34,8 @@ export default function GoogleAd({ slot }) {
   const adSlotId = 
     slot === 'menu' ? '2345678901' : 
     slot === 'gameOver' ? '3456789012' : 
-    slot === 'top' ? '1234567890' : 
+    slot === 'left' ? '4567890123' : 
+    slot === 'right' ? '5678901234' : 
     '0987654321';
 
   const clientPubId = import.meta.env.VITE_ADSENSE_CLIENT_ID || 'ca-pub-XXXXXXXXXXXXXXXX';
@@ -46,7 +47,7 @@ export default function GoogleAd({ slot }) {
         style={{ display: 'block' }}
         data-ad-client={clientPubId}
         data-ad-slot={adSlotId}
-        data-ad-format="horizontal"
+        data-ad-format={slot === 'left' || slot === 'right' ? 'vertical' : 'horizontal'}
         data-full-width-responsive="true"
       />
       <div className="google-ad-placeholder">

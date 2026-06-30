@@ -322,52 +322,70 @@ export default function App() {
   }, [phase])
 
   const isGameplay = phase === 'playing' || phase === 'paused'
+  const activeRoom = useGameStore(s => s.activeRoom)
+  const multiplayerMode = useGameStore(s => s.multiplayerMode)
 
   return (
     <div className={`app-root ${isGameplay ? 'gameplay-active' : ''}`}>
       {!isGameplay && (
-        <>
-          <header className="game-header">
-            <h1 className="game-header-title">SCALADA</h1>
-          </header>
-          <div className="ad-container ad-top">
-            <GoogleAd slot="top" />
+        <header className="game-header">
+          <div className="header-left">
+            <span className="header-logo">⚡ SCALADA</span>
+            <span className="header-subtitle">CHALLENGE</span>
           </div>
-        </>
+          <div className="header-right">
+            {multiplayerMode === 'online' ? (
+              <span className="header-status status-online">🌐 ONLINE ROOM: {activeRoom?.id || '...' }</span>
+            ) : multiplayerMode === 'local' ? (
+              <span className="header-status status-local">👥 LOCAL CO-OP</span>
+            ) : (
+              <span className="header-status status-single">👤 SINGLE PLAYER</span>
+            )}
+          </div>
+        </header>
       )}
 
-      <div className="game-container">
-        <KeyboardControls map={KEYBOARD_MAP}>
-          <Canvas
-            shadows
-            camera={{ position: [0, 10, 15], fov: 60, near: 0.1, far: 1000 }}
-            gl={{ antialias: true, powerPreference: 'high-performance' }}
-            dpr={[1, 2]}
-          >
-            <Suspense fallback={null}>
-              <Scene player1PosRef={player1PosRef} player2PosRef={player2PosRef} />
-            </Suspense>
-          </Canvas>
-        </KeyboardControls>
+      <div className="main-layout-wrap">
+        {!isGameplay && (
+          <div className="ad-container ad-left">
+            <GoogleAd slot="left" />
+          </div>
+        )}
 
-        <HUD />
-        <HeightMilestone />
-        <GameOverlay />
-        <AuthModal />
-        <LeaderboardModal />
-        <VirtualJoystick />
-        <JumpButton />
+        <div className="game-container">
+          <KeyboardControls map={KEYBOARD_MAP}>
+            <Canvas
+              shadows
+              camera={{ position: [0, 10, 15], fov: 60, near: 0.1, far: 1000 }}
+              gl={{ antialias: true, powerPreference: 'high-performance' }}
+              dpr={[1, 2]}
+            >
+              <Suspense fallback={null}>
+                <Scene player1PosRef={player1PosRef} player2PosRef={player2PosRef} />
+              </Suspense>
+            </Canvas>
+          </KeyboardControls>
+
+          <HUD />
+          <HeightMilestone />
+          <GameOverlay />
+          <AuthModal />
+          <LeaderboardModal />
+          <VirtualJoystick />
+          <JumpButton />
+        </div>
+
+        {!isGameplay && (
+          <div className="ad-container ad-right">
+            <GoogleAd slot="right" />
+          </div>
+        )}
       </div>
 
       {!isGameplay && (
-        <>
-          <div className="ad-container ad-bottom">
-            <GoogleAd slot="bottom" />
-          </div>
-          <footer className="game-footer">
-            <p className="game-footer-text">© 2026 Scalada Challenge · Todos los derechos reservados</p>
-          </footer>
-        </>
+        <footer className="game-footer">
+          <p className="game-footer-text">© 2026 Scalada Challenge · Diseñado con estética Premium</p>
+        </footer>
       )}
     </div>
   )
