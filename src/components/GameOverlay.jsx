@@ -3,6 +3,7 @@ import useGameStore from '../store/useGameStore'
 import audioSystem from '../utils/audioSystem'
 import { isSupabaseConfigured } from '../utils/supabaseClient'
 import AdSimulationOverlay from './AdSimulationOverlay'
+import GoogleAd from './GoogleAd'
 
 /* ── Transition timing must match CSS .overlay--exit duration ─── */
 const EXIT_MS = 680
@@ -74,7 +75,8 @@ export default function GameOverlay() {
       {phase !== 'playing' && (
         <div className={[
           'overlay',
-          phase === 'ready' ? 'overlay--ready' : phase === 'paused' ? 'overlay--paused' : 'overlay--dead',
+          phase === 'paused' ? 'overlay-fixed overlay--paused' : 'overlay-bounded',
+          phase === 'ready' ? 'overlay--ready' : phase === 'dead' ? 'overlay--dead' : '',
           exiting         ? 'overlay--exit'  : '',
         ].filter(Boolean).join(' ')}>
 
@@ -113,6 +115,8 @@ export default function GameOverlay() {
               <p className="subtitle">
                 Sube lo más alto que puedas antes de caer al vacío
               </p>
+
+              <GoogleAd slot="menu" />
 
               {/* Game Mode Selector */}
               <div className="menu-section">
@@ -463,6 +467,8 @@ export default function GameOverlay() {
                   {saveScoreStatus === 'error' && <span className="status-error">❌ Error al conectar con la nube</span>}
                 </div>
               )}
+
+              <GoogleAd slot="gameOver" />
 
               <div className="game-over-buttons-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '280px' }}>
                 <button 
