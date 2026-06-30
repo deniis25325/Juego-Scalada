@@ -394,10 +394,13 @@ export default function App() {
           </div>
         )}
       </div>
-
       {!isGameplay && (
         <footer className="game-footer">
-          <p className="game-footer-text">© 2026 Scalada Challenge · Diseñado con estética Premium</p>
+          <p className="game-footer-text">
+            © 2026 Scalada Challenge · Diseñado con estética Premium · 
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="footer-link">Política de Privacidad</a> · 
+            <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="footer-link">Términos de Servicio</a>
+          </p>
         </footer>
       )}
     </div>

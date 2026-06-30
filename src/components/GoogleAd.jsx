@@ -4,27 +4,16 @@ export default function GoogleAd({ slot }) {
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    const clientID = import.meta.env.VITE_ADSENSE_CLIENT_ID || 'ca-pub-5536356974720104';
-    if (clientID) {
-      const existingScript = document.querySelector('script[src*="adsbygoogle"]');
-      if (!existingScript) {
-        const script = document.createElement('script');
-        script.async = true;
-        script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${clientID}`;
-        script.crossOrigin = 'anonymous';
-        document.head.appendChild(script);
-      }
-    }
+    // 1. Asegurar la existencia del array de adsbygoogle en window
+    window.adsbygoogle = window.adsbygoogle || [];
 
-    // 2. Empujar la unidad de anuncio si aún no se inicializó
+    // 2. Empujar la unidad de anuncio de forma segura si no se inicializó en este ciclo
     if (!initializedRef.current) {
       initializedRef.current = true;
       try {
-        if (window.adsbygoogle) {
-          (window.adsbygoogle = window.adsbygoogle || []).push({});
-        }
+        window.adsbygoogle.push({});
       } catch (e) {
-        console.log('AdSense unit is not ready or blocked:', e);
+        console.log('AdSense push unit is not ready or blocked:', e);
       }
     }
   }, [slot]);
