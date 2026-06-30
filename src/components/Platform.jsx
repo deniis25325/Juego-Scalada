@@ -134,12 +134,16 @@ function MovingPlatform({ position, size, rotation, type, isMobile }) {
       const offset = Math.sin(timeRef.current) * mobileRange;
       const [ox, oy, oz] = originRef.current;
 
-      rbRef.current.setTranslation(
-        mobileAxis === 'x'
-          ? { x: ox + offset, y: oy, z: oz }
-          : { x: ox,          y: oy, z: oz + offset },
-        true
-      );
+      try {
+        rbRef.current.setTranslation(
+          mobileAxis === 'x'
+            ? { x: ox + offset, y: oy, z: oz }
+            : { x: ox,          y: oy, z: oz + offset },
+          true
+        );
+      } catch (e) {
+        // Ignorar errores de puntero nulo cuando la plataforma se destruye o desmonta
+      }
     }
   });
 
