@@ -2,7 +2,7 @@ import { useState } from 'react'
 import useGameStore from '../store/useGameStore'
 import audioSystem from '../utils/audioSystem'
 import { isSupabaseConfigured } from '../utils/supabaseClient'
-import AdSimulationOverlay from './AdSimulationOverlay'
+
 
 
 /* ── Transition timing must match CSS .overlay--exit duration ─── */
@@ -47,7 +47,6 @@ export default function GameOverlay() {
   const saveScoreStatus       = useGameStore(s => s.saveScoreStatus)
 
   const [exiting, setExiting] = useState(false)
-  const [adOpen, setAdOpen] = useState(false)
   const [joiningCodeOpen, setJoiningCodeOpen] = useState(false)
   const [roomCodeInput, setRoomCodeInput] = useState('')
 
@@ -471,12 +470,7 @@ export default function GameOverlay() {
 
 
               <div className="game-over-buttons-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '280px' }}>
-                <button 
-                  className="btn-play btn-ad-continue" 
-                  onClick={(e) => { e.currentTarget.blur(); audioSystem.playSFX('ui'); setAdOpen(true); }}
-                >
-                  📺&nbsp;&nbsp;VER ANUNCIO PARA CONTINUAR
-                </button>
+
 
                 <button 
                   className="btn-play btn-secondary" 
@@ -515,8 +509,6 @@ export default function GameOverlay() {
       {/* Screen fade transition overlay */}
       <div className={`fade-screen ${isTransitioning ? 'fade-screen--active' : ''}`} />
 
-      {/* Ad Simulation Overlay */}
-      <AdSimulationOverlay isOpen={adOpen} onClose={() => setAdOpen(false)} />
     </>
   )
 }
