@@ -1810,6 +1810,19 @@ html, body, #root {
   height: 100% !important;
 }
 
+/* Ocultar anuncios automáticos (Auto Ads) inyectados por Google fuera de nuestras cajas autorizadas (.google-ad-wrap) */
+.game-container ins.adsbygoogle:not(.google-ad-wrap ins),
+.game-container .adsbygoogle:not(.google-ad-wrap *),
+.game-container .google-auto-placed,
+.game-container #google_image_div {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
 .overlay-fixed {
   position: fixed !important;
 }

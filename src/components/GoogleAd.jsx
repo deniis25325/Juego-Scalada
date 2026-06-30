@@ -4,8 +4,7 @@ export default function GoogleAd({ slot }) {
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    // 1. Cargar el script de forma única
-    const clientID = import.meta.env.VITE_ADSENSE_CLIENT_ID;
+    const clientID = import.meta.env.VITE_ADSENSE_CLIENT_ID || 'ca-pub-5536356974720104';
     if (clientID) {
       const existingScript = document.querySelector('script[src*="adsbygoogle"]');
       if (!existingScript) {
@@ -38,7 +37,7 @@ export default function GoogleAd({ slot }) {
     slot === 'right' ? '5678901234' : 
     '0987654321';
 
-  const clientPubId = import.meta.env.VITE_ADSENSE_CLIENT_ID || 'ca-pub-XXXXXXXXXXXXXXXX';
+  const clientPubId = import.meta.env.VITE_ADSENSE_CLIENT_ID || 'ca-pub-5536356974720104';
 
   return (
     <div className={`google-ad-wrap ad-slot-${slot}`}>
