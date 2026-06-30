@@ -125,7 +125,10 @@ function DynamicSky({ config }) {
 }
 
 function EnvironmentalParticles({ playerPosRef, scenario }) {
-  const count = 120
+  const count = useMemo(() => {
+    const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+    return isMobile ? 35 : 120;
+  }, []);
   const meshRef = useRef()
 
   const particles = useMemo(() => {
@@ -194,7 +197,17 @@ function Scene({ player1PosRef, player2PosRef }) {
   const scenario = useGameStore(s => s.scenario)
   const dirLightRef = useRef()
 
-  const config = SCENE_CONFIGS[scenario] || SCENE_CONFIGS.default
+  const config = useMemo(() => {
+    const base = SCENE_CONFIGS[scenario] || SCENE_CONFIGS.default
+    const isMobile = typeof window !== 'undefined' && (window.innerWidth < 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0)
+    if (isMobile) {
+      return {
+        ...base,
+        starsCount: Math.min(base.starsCount, 1200)
+      }
+    }
+    return base
+  }, [scenario])
 
   // Dynamic BGM frequency filtering and dynamic shadow light position following
   useFrame(() => {

@@ -33,7 +33,7 @@ html, body, #root {
 /* ─── HUD ────────────────────────────────────────────────── */
 .hud {
   position: fixed;
-  top: 20px;
+  top: calc(20px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1488,8 +1488,8 @@ html, body, #root {
 
 .joystick-container {
   position: fixed;
-  bottom: 5vh;
-  left: 6vw;
+  bottom: calc(5vh + env(safe-area-inset-bottom, 0px));
+  left: calc(6vw + env(safe-area-inset-left, 0px));
   width: 110px;
   height: 110px;
   z-index: 250;
@@ -1536,8 +1536,8 @@ html, body, #root {
 
 .jump-button-container {
   position: fixed;
-  bottom: 6vh;
-  right: 8vw;
+  bottom: calc(6vh + env(safe-area-inset-bottom, 0px));
+  right: calc(8vw + env(safe-area-inset-right, 0px));
   width: 80px;
   height: 80px;
   z-index: 250;
@@ -1698,8 +1698,8 @@ html, body, #root {
 /* ─── Pause Button ─── */
 .btn-pause-trigger {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
   width: 46px;
   height: 46px;
   border-radius: 14px;
@@ -2071,6 +2071,60 @@ html, body, #root {
   .google-ad-placeholder span {
     font-size: 8px;
     letter-spacing: 1px;
+  }
+}
+
+/* ─── Mobile Web & Safari Scroll/Stacking Optimizations ─── */
+.overlay,
+.auth-overlay,
+.leaderboard-overlay,
+.ad-overlay {
+  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS */
+}
+
+/* Evitar que los botones del menú se desborden en pantallas pequeñas */
+@media (max-width: 480px) {
+  .selector-group {
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .selector-btn {
+    width: 100% !important;
+    padding: 10px 14px !important;
+    font-size: 12px !important;
+  }
+  .logo-wrap {
+    margin-bottom: 2px !important;
+  }
+  .game-title {
+    font-size: clamp(34px, 10vw, 54px) !important;
+  }
+  .subtitle {
+    font-size: 11px !important;
+    max-width: 280px !important;
+    line-height: 1.4 !important;
+  }
+  .hud {
+    padding: 6px 10px !important;
+    gap: 0 !important;
+  }
+  .hud-value {
+    font-size: 20px !important;
+  }
+  .hud-label {
+    font-size: 7px !important;
+    letter-spacing: 1px !important;
+  }
+  
+  /* Ajustar botones en el Game Over */
+  .game-over-buttons-wrap {
+    max-width: 240px !important;
+    gap: 8px !important;
+  }
+  .btn-play {
+    font-size: 11px !important;
+    padding: 10px 24px !important;
   }
 }
 
