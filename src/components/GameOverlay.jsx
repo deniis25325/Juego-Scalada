@@ -3,7 +3,7 @@ import useGameStore from '../store/useGameStore'
 import audioSystem from '../utils/audioSystem'
 import { isSupabaseConfigured } from '../utils/supabaseClient'
 import AdSimulationOverlay from './AdSimulationOverlay'
-import GoogleAd from './GoogleAd'
+
 
 /* ── Transition timing must match CSS .overlay--exit duration ─── */
 const EXIT_MS = 680
@@ -116,7 +116,7 @@ export default function GameOverlay() {
                 Sube lo más alto que puedas antes de caer al vacío
               </p>
 
-              <GoogleAd slot="menu" />
+
 
               {/* Game Mode Selector */}
               <div className="menu-section">
@@ -468,7 +468,7 @@ export default function GameOverlay() {
                 </div>
               )}
 
-              <GoogleAd slot="gameOver" />
+
 
               <div className="game-over-buttons-wrap" style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', maxWidth: '280px' }}>
                 <button 

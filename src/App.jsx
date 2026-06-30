@@ -18,7 +18,6 @@ import VirtualJoystick from './components/VirtualJoystick'
 import JumpButton from './components/JumpButton'
 import useGameStore from './store/useGameStore'
 import audioSystem from './utils/audioSystem'
-import GoogleAd from './components/GoogleAd'
 
 const KEYBOARD_MAP = [
   // Player 1 controls
@@ -358,42 +357,29 @@ export default function App() {
         </header>
       )}
 
-      <div className="main-layout-wrap">
-        {!isGameplay && (
-          <div className="ad-container ad-left">
-            <GoogleAd slot="left" />
-          </div>
-        )}
+      <div className="game-container">
+        <KeyboardControls map={KEYBOARD_MAP}>
+          <Canvas
+            shadows
+            camera={{ position: [0, 10, 15], fov: 60, near: 0.1, far: 1000 }}
+            gl={{ antialias: true, powerPreference: 'high-performance' }}
+            dpr={[1, 2]}
+          >
+            <Suspense fallback={null}>
+              <Scene player1PosRef={player1PosRef} player2PosRef={player2PosRef} />
+            </Suspense>
+          </Canvas>
+        </KeyboardControls>
 
-        <div className="game-container">
-          <KeyboardControls map={KEYBOARD_MAP}>
-            <Canvas
-              shadows
-              camera={{ position: [0, 10, 15], fov: 60, near: 0.1, far: 1000 }}
-              gl={{ antialias: true, powerPreference: 'high-performance' }}
-              dpr={[1, 2]}
-            >
-              <Suspense fallback={null}>
-                <Scene player1PosRef={player1PosRef} player2PosRef={player2PosRef} />
-              </Suspense>
-            </Canvas>
-          </KeyboardControls>
-
-          <HUD />
-          <HeightMilestone />
-          <GameOverlay />
-          <AuthModal />
-          <LeaderboardModal />
-          <VirtualJoystick />
-          <JumpButton />
-        </div>
-
-        {!isGameplay && (
-          <div className="ad-container ad-right">
-            <GoogleAd slot="right" />
-          </div>
-        )}
+        <HUD />
+        <HeightMilestone />
+        <GameOverlay />
+        <AuthModal />
+        <LeaderboardModal />
+        <VirtualJoystick />
+        <JumpButton />
       </div>
+
       {!isGameplay && (
         <footer className="game-footer">
           <p className="game-footer-text">
